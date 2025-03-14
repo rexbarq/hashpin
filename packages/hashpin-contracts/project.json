@@ -1,0 +1,37 @@
+{
+  "name": "hashpin-contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/hashpin-contracts",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "hardhat compile",
+        "cwd": "packages/hashpin-contracts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "hardhat test",
+        "cwd": "packages/hashpin-contracts"
+      }
+    },
+    "deploy:local": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "hardhat run scripts/deploy.ts --network localhost",
+        "cwd": "packages/hashpin-contracts"
+      }
+    },
+    "deploy:sepolia": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "hardhat run scripts/deploy.ts --network sepolia",
+        "cwd": "packages/hashpin-contracts"
+      }
+    }
+  },
+  "tags": []
+} 
