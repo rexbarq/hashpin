@@ -44,7 +44,7 @@ const CONTRACT_ABI = [
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "hash",
+        "name": "powHash",
         "type": "bytes32"
       },
       {
@@ -77,10 +77,123 @@ const CONTRACT_ABI = [
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "claimer",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "adapter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "HashClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "adapter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "whitelisted",
+        "type": "bool"
+      }
+    ],
+    "name": "AdapterWhitelisted",
+    "type": "event"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
         "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "nonce",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "metadata",
+        "type": "string"
+      }
+    ],
+    "name": "pinHash",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "address",
+        "name": "adapter",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "metadata",
+        "type": "bytes"
+      }
+    ],
+    "name": "claimHash",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "powHash",
         "type": "bytes32"
       }
     ],
@@ -124,29 +237,6 @@ const CONTRACT_ABI = [
         "internalType": "bytes32",
         "name": "hash",
         "type": "bytes32"
-      },
-      {
-        "internalType": "uint256",
-        "name": "nonce",
-        "type": "uint256"
-      },
-      {
-        "internalType": "string",
-        "name": "metadata",
-        "type": "string"
-      }
-    ],
-    "name": "pinHash",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "hash",
-        "type": "bytes32"
       }
     ],
     "name": "meetsDifficulty",
@@ -164,42 +254,13 @@ const CONTRACT_ABI = [
     "inputs": [
       {
         "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "name": "pinnedHashes",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "pinner",
-        "type": "address"
-      },
-      {
-        "internalType": "bytes32",
         "name": "hash",
         "type": "bytes32"
       },
       {
-        "internalType": "string",
-        "name": "metadata",
-        "type": "string"
-      },
-      {
-        "internalType": "uint256",
-        "name": "timestamp",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "hash",
-        "type": "bytes32"
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
       }
     ],
     "name": "verifyHash",
@@ -212,6 +273,37 @@ const CONTRACT_ABI = [
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "adapter",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "whitelisted",
+        "type": "bool"
+      }
+    ],
+    "name": "setAdapterWhitelisted",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "newDifficulty",
+        "type": "uint256"
+      }
+    ],
+    "name": "setDifficulty",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   }
 ] as const
 
@@ -221,21 +313,46 @@ export function HashPinForm() {
   const [file, setFile] = useState<File | null>(null)
   const [metadata, setMetadata] = useState('')
   const [fileHash, setFileHash] = useState('')
+  const [powHash, setPowHash] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isMining, setIsMining] = useState(false)
   const [miningProgress, setMiningProgress] = useState(0)
   const [validNonce, setValidNonce] = useState<number | null>(null)
   const [difficulty, setDifficulty] = useState<number>(0)
+  const [isLoadingDifficulty, setIsLoadingDifficulty] = useState(false)
 
   const { writeContract, data: txHash, error: writeError, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   })
 
-  const isLoading = isPending || isConfirming || isMining
+  const isLoading = isPending || isConfirming || isMining || isLoadingDifficulty
 
   useEffect(() => {
     setMounted(true)
+
+    // Fetch current difficulty from the contract when component mounts
+    const fetchDifficulty = async () => {
+      try {
+        setIsLoadingDifficulty(true)
+        // This is a simplified approach - in production you should use a proper provider
+        // and contract instance
+        const provider = new ethers.JsonRpcProvider()
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
+        const difficultyBigInt = await contract.getDifficulty()
+        const difficultyNumber = Number(difficultyBigInt)
+        console.log('Current difficulty from contract:', difficultyNumber)
+        setDifficulty(difficultyNumber)
+      } catch (error) {
+        console.error('Error fetching difficulty:', error)
+        // Set a default difficulty if we cannot fetch from contract
+        setDifficulty(4)
+      } finally {
+        setIsLoadingDifficulty(false)
+      }
+    }
+
+    fetchDifficulty()
   }, [])
 
   useEffect(() => {
@@ -306,26 +423,28 @@ export function HashPinForm() {
   }
 
   // Function to mine a valid nonce
-  const mineValidNonce = async (hash: string): Promise<number | null> => {
+  const mineValidNonce = async (hash: string): Promise<{nonce: number, powHash: string} | null> => {
     if (!hash) return null
     
     try {
       console.log("Starting mining process for hash:", hash);
       
-      // Set a fixed difficulty for testing
-      const testDifficulty = 4; // Start with a low difficulty
-      console.log("Using test difficulty:", testDifficulty);
-      setDifficulty(testDifficulty);
+      // If difficulty wasn't set by the contract, use a default value
+      if (difficulty === 0) {
+        console.log("Using default difficulty: 4");
+        setDifficulty(4);
+      }
       
       setIsMining(true)
       setMiningProgress(0)
       setValidNonce(null)
+      setPowHash('')
       
       let nonce = 0
       const maxNonce = 1000000 // Prevent infinite loops
       const updateInterval = 1000 // Update progress every 1000 attempts
       
-      console.log("Starting mining loop with difficulty:", testDifficulty);
+      console.log("Starting mining loop with difficulty:", difficulty);
       
       // Try a few nonces for debugging
       for (let debugNonce = 0; debugNonce < 5; debugNonce++) {
@@ -358,8 +477,9 @@ export function HashPinForm() {
         if (meets) {
           console.log(`Found valid nonce: ${nonce} with hash:`, powHash);
           setValidNonce(nonce)
+          setPowHash(powHash)
           setIsMining(false)
-          return nonce
+          return { nonce, powHash }
         }
         
         nonce++
@@ -393,6 +513,7 @@ export function HashPinForm() {
     setFile(file)
     setErrorMessage(null) // Clear any previous error when selecting a new file
     setValidNonce(null) // Reset nonce when file changes
+    setPowHash('') // Reset powHash when file changes
     
     // Calculate hash
     const buffer = await file.arrayBuffer()
@@ -410,9 +531,10 @@ export function HashPinForm() {
       // If we don't have a valid nonce yet, mine one
       let nonce: number;
       if (validNonce === null) {
-        const minedNonce = await mineValidNonce(fileHash);
-        if (minedNonce === null) return; // Mining failed
-        nonce = minedNonce;
+        const miningResult = await mineValidNonce(fileHash);
+        if (miningResult === null) return; // Mining failed
+        nonce = miningResult.nonce;
+        setPowHash(miningResult.powHash);
       } else {
         nonce = validNonce;
       }
@@ -423,6 +545,17 @@ export function HashPinForm() {
         args: [fileHash, nonce, metadata],
       });
 
+      // Store these values before transaction in case we need them
+      const calculatedPowHash = ethers.keccak256(
+        ethers.solidityPacked(["bytes32", "uint256"], [fileHash, nonce])
+      );
+      console.log("Calculated powHash before transaction:", calculatedPowHash);
+      
+      // Make sure we have the powHash even if we didn't mine it in this session
+      if (!powHash) {
+        setPowHash(calculatedPowHash);
+      }
+
       writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         abi: CONTRACT_ABI,
@@ -432,6 +565,89 @@ export function HashPinForm() {
     } catch (error) {
       console.error("Submission error:", error);
       setErrorMessage("Failed to submit transaction. Please try again.");
+    }
+  }
+
+  // Function to download the PIN file
+  const handleDownloadPinFile = () => {
+    if (!file || validNonce === null || !fileHash || !powHash) {
+      console.error("Missing required data for PIN file:", {
+        hasFile: !!file,
+        hasValidNonce: validNonce !== null,
+        hasFileHash: !!fileHash,
+        hasPowHash: !!powHash
+      });
+      setErrorMessage("Unable to generate PIN file: missing required data");
+      return;
+    }
+    
+    try {
+      // Convert nonce to bytes32 hex string for the proof
+      const nonceAsHex = `0x${validNonce.toString(16).padStart(64, '0')}`;
+      
+      // Current timestamp
+      const timestamp = Math.floor(Date.now() / 1000); // Convert to Unix timestamp (seconds)
+      
+      // Mock network info - in a real app, this would come from the connected wallet
+      const networkId = 1337; // Local hardhat network
+      const networkName = 'localhost';
+      
+      // Mock wallet address - in a real app, this would be the connected wallet address
+      const walletAddress = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'; // Default Hardhat account
+      
+      // Generate the PIN file data structure
+      const pinData = {
+        version: "1.0",
+        fileInfo: {
+          hash: fileHash,
+          name: file.name,
+          size: file.size,
+          mimeType: file.type || 'application/octet-stream'
+        },
+        pinData: {
+          originalHash: fileHash,
+          powHash: powHash,
+          timestamp: timestamp,
+          metadata: metadata,
+          proof: [nonceAsHex]
+        },
+        pinnerInfo: {
+          address: walletAddress
+        },
+        blockchainInfo: {
+          network: networkName,
+          networkId: networkId,
+          contractAddress: CONTRACT_ADDRESS,
+          transactionHash: txHash,
+          blockNumber: 0 // This would be updated in a real app
+        },
+        services: {
+          claimUrl: `https://hashpin.io/claim?hash=${fileHash}`,
+          verifyUrl: `https://hashpin.io/verify?hash=${fileHash}`
+        }
+      };
+      
+      // Stringify with pretty formatting
+      const pinFileJSON = JSON.stringify(pinData, null, 2);
+      console.log("PIN file data generated:", pinFileJSON.substring(0, 100) + "...");
+      
+      // Create a blob with the PIN data
+      const blob = new Blob([pinFileJSON], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create a temporary anchor element to trigger the download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${file.name.split('.')[0] || 'file'}.pin`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error generating PIN file:", error);
+      setErrorMessage("Error generating PIN file");
     }
   }
 
@@ -492,6 +708,15 @@ export function HashPinForm() {
           />
         </div>
         
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Current Difficulty: {isLoadingDifficulty ? 'Loading...' : `${difficulty} bits`}
+          </label>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            The proof-of-work requires finding a hash with {difficulty} leading zero bits
+          </p>
+        </div>
+        
         {isMining && (
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -518,6 +743,17 @@ export function HashPinForm() {
             </div>
           </div>
         )}
+
+        {powHash && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Proof-of-Work Hash
+            </label>
+            <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono break-all">
+              {powHash}
+            </div>
+          </div>
+        )}
         
         <button
           type="submit"
@@ -538,8 +774,18 @@ export function HashPinForm() {
         )}
         
         {isSuccess && (
-          <div className="text-green-500 text-sm mt-2">
-            Hash successfully pinned to the blockchain!
+          <div className="space-y-4 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+            <div className="text-green-600 dark:text-green-400 font-medium">
+              Hash successfully pinned to the blockchain!
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleDownloadPinFile}
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              Download .pin File
+            </button>
           </div>
         )}
       </form>

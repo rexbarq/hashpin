@@ -2,7 +2,8 @@
 
 import { WalletConnect } from '@/components/WalletConnect'
 import { HashPinForm } from '@/components/HashPinForm'
-import { Component, ErrorInfo, ReactNode } from 'react'
+import { HashClaimForm } from '@/components/HashVerify'
+import { Component, ErrorInfo, ReactNode, useState } from 'react'
 
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -42,6 +43,8 @@ class ErrorBoundary extends Component<
 }
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<'pin' | 'claim'>('pin')
+  
   return (
     <main className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
       <div className="max-w-2xl mx-auto space-y-8">
@@ -55,11 +58,43 @@ export default function Home() {
           <WalletConnect />
         </header>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Pin a Hash</h2>
-          <ErrorBoundary>
-            <HashPinForm />
-          </ErrorBoundary>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          {/* Tab Navigation */}
+          <div className="flex border-b border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setActiveTab('pin')}
+              className={`flex-1 py-4 px-6 text-center font-medium ${
+                activeTab === 'pin'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 dark:border-blue-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              Pin Hash
+            </button>
+            <button
+              onClick={() => setActiveTab('claim')}
+              className={`flex-1 py-4 px-6 text-center font-medium ${
+                activeTab === 'claim'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500 dark:border-blue-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              Claim as NFT
+            </button>
+          </div>
+          
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'pin' ? (
+              <ErrorBoundary>
+                <HashPinForm />
+              </ErrorBoundary>
+            ) : (
+              <ErrorBoundary>
+                <HashClaimForm />
+              </ErrorBoundary>
+            )}
+          </div>
         </div>
       </div>
     </main>
