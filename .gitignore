@@ -40,6 +40,10 @@ Thumbs.db
 /cache/
 /artifacts/
 
+# Local deployment files
+# Do not commit development environment deployment data
+packages/hashpin-contracts/deployments/*.json
+
 # Debug logs
 npm-debug.log*
 yarn-debug.log*
