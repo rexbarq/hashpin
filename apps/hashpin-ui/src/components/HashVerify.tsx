@@ -1,9 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract, usePublicClient } from 'wagmi'
 import { ethers } from 'ethers'
 import { useAccount } from 'wagmi'
+
+// Add type definition for window.ethereum
+declare global {
+  interface Window {
+    ethereum?: any; // Use any to avoid conflicts with existing ethereum definitions
+  }
+}
 
 // Contract configuration (same as in HashPinForm)
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || ''
@@ -142,18 +149,32 @@ const ADAPTER_ABI = [
 // For now using environment variables or defaults for development
 const HASHPIN_ADAPTERS = [
   {
+    id: "erc721",
     name: "ERC721 Hashpin NFT",
     address: process.env.NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS || "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
     description: "Standard NFT adapter - each hash becomes a unique token",
     type: "ERC721"
   },
   {
+    id: "erc1155",
     name: "ERC1155 Hashpin Collection",
     address: process.env.NEXT_PUBLIC_ERC1155_ADAPTER_ADDRESS || "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
     description: "Multi-token NFT adapter - supports multiple editions of the same hash",
     type: "ERC1155"
   }
 ]
+
+// Diagnostic logging for initial adapter state
+console.log("🔍 INITIAL ADAPTER CONFIG:", {
+  adapters: HASHPIN_ADAPTERS.map(a => ({
+    id: a.id,
+    name: a.name,
+    address: a.address,
+    type: a.type
+  })),
+  erc721Address: process.env.NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS || "not set",
+  erc1155Address: process.env.NEXT_PUBLIC_ERC1155_ADAPTER_ADDRESS || "not set"
+});
 
 // Interface for our PIN file structure
 interface PinFile {
@@ -189,6 +210,13 @@ interface PinFile {
 }
 
 export function HashClaimForm() {
+  // Debug render count
+  const renderCount = useRef(0);
+  useEffect(() => {
+    renderCount.current += 1;
+    console.log(`📊 HashClaimForm render #${renderCount.current}`);
+  });
+
   const [mounted, setMounted] = useState(false)
   const [pinFile, setPinFile] = useState<PinFile | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -222,8 +250,22 @@ export function HashClaimForm() {
   const isLoading = isPending || isConfirming
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    if (!mounted) {
+      setMounted(true)
+      
+      // Log adapter state on initial mount
+      console.log('🔍 COMPONENT MOUNT: Current adapters state:', adapters);
+      
+      // Compare initial state with HASHPIN_ADAPTERS
+      if (adapters.length !== HASHPIN_ADAPTERS.length) {
+        console.warn(`⚠️ Adapter length mismatch: adapters state (${adapters.length}) vs HASHPIN_ADAPTERS (${HASHPIN_ADAPTERS.length})`);
+      }
+      
+      // Check for identical objects (possible reference issues)
+      const isStateAReference = adapters === HASHPIN_ADAPTERS;
+      console.log(`📊 Is adapters state a direct reference to HASHPIN_ADAPTERS? ${isStateAReference}`);
+    }
+  }, [mounted, adapters]);
 
   // Check if hash is already claimed when a pin file is loaded and adapter is selected
   useEffect(() => {
@@ -649,6 +691,92 @@ export function HashClaimForm() {
     return `https://opensea.io/assets/${adapterAddress}/${tokenId.toString()}`;
   };
 
+  // Debug dropdown options without changing behavior
+  const logAdapters = () => {
+    // Count addresses for diagnostic purposes
+    const adapterAddressCounts: Record<string, number> = {};
+    adapters.forEach(adapter => {
+      adapterAddressCounts[adapter.address] = (adapterAddressCounts[adapter.address] || 0) + 1;
+    });
+    
+    // Find duplicates
+    const duplicateAddresses = Object.entries(adapterAddressCounts)
+      .filter(([_, count]) => count > 1)
+      .map(([address]) => address);
+    
+    if (duplicateAddresses.length > 0) {
+      console.warn('⚠️ DUPLICATE ADDRESSES DETECTED in dropdown:', 
+        duplicateAddresses.map(address => {
+          const dupes = adapters.filter(a => a.address === address);
+          return {
+            address,
+            count: dupes.length,
+            adapters: dupes.map(a => a.name)
+          };
+        })
+      );
+    }
+    
+    // Annotate adapters with index for debugging
+    return adapters.map((adapter, index) => ({
+      ...adapter,
+      _debugIndex: index
+    }));
+  };
+
+  // Inside the HashClaimForm component, add this function to add NFT to MetaMask
+  const addNFTToMetaMask = async () => {
+    if (!tokenId || !selectedAdapter) {
+      setErrorMessage('Missing token information. Cannot add to MetaMask.');
+      return;
+    }
+
+    try {
+      // Check if ethereum is available (MetaMask is installed)
+      const ethereum = window.ethereum;
+      if (!ethereum || typeof ethereum.request !== 'function') {
+        setErrorMessage('MetaMask is not installed or not properly configured. Please install it to use this feature.');
+        return;
+      }
+
+      // Get the adapter contract to fetch token information
+      const adapterName = adapters.find(a => a.address === selectedAdapter)?.name || 'Hashpin NFT';
+      const adapterType = adapters.find(a => a.address === selectedAdapter)?.type || 'ERC721';
+      
+      console.log('Requesting MetaMask to watch NFT asset:', {
+        address: selectedAdapter,
+        tokenId: tokenId.toString(),
+        type: adapterType,
+        name: adapterName
+      });
+
+      // Request MetaMask to watch the asset
+      const wasAdded = await ethereum.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC721', // Currently MetaMask uses this for all NFTs
+          options: {
+            address: selectedAdapter, // The NFT contract address
+            tokenId: tokenId.toString(), // The token ID as a string
+          },
+        },
+      });
+
+      if (wasAdded) {
+        console.log('NFT was successfully added to MetaMask');
+      } else {
+        console.log('User declined to add the NFT to MetaMask');
+      }
+    } catch (error) {
+      console.error('Error adding NFT to MetaMask:', error);
+      // Safe error message extraction
+      const errorMessage = error && typeof error === 'object' && 'message' in error 
+        ? String(error.message) 
+        : 'Unknown error';
+      setErrorMessage(`Failed to add NFT to MetaMask: ${errorMessage}`);
+    }
+  };
+
   // Render loading state
   if (!mounted) {
     return (
@@ -742,11 +870,18 @@ export function HashClaimForm() {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm"
                 disabled={isLoading}
               >
-                {adapters.map((adapter) => (
-                  <option key={adapter.address} value={adapter.address}>
-                    {adapter.name} - {adapter.description}
-                  </option>
-                ))}
+                {logAdapters().map((adapter, index) => {
+                  console.log(`🔍 Rendering adapter option #${index}:`, adapter.name, adapter.address, adapter._debugIndex);
+                  return (
+                    <option 
+                      key={`${adapter.id}-${index}`} 
+                      value={adapter.address}
+                      data-debug-index={adapter._debugIndex}
+                    >
+                      {adapter.name} - {adapter.description} ({index})
+                    </option>
+                  );
+                })}
               </select>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 This adapter determines the type of NFT that will be created
@@ -831,30 +966,100 @@ export function HashClaimForm() {
               <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
               </svg>
-              <div className="ml-3">
+              <div className="ml-3 w-full">
                 <h3 className="text-sm font-medium text-green-800 dark:text-green-300">Success</h3>
-                <div className="mt-1 text-sm text-green-700 dark:text-green-400">
-                  Hash successfully claimed as NFT!
-                  {tokenId !== null && (
-                    <p className="mt-1">
-                      <span className="font-medium">Token ID:</span> {tokenId.toString()}
-                    </p>
-                  )}
-                  <p className="mt-1">
-                    Transaction Hash: <a 
-                      href={`https://etherscan.io/tx/${txHash}`} 
+                <div className="mt-2 text-sm text-green-700 dark:text-green-400">
+                  <p className="font-medium">Hash successfully claimed as NFT!</p>
+                  
+                  <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded border border-green-200 dark:border-green-800">
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">NFT Details</h4>
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs">
+                      <div>
+                        <dt className="font-medium text-gray-500 dark:text-gray-400">Contract Address</dt>
+                        <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono break-all flex items-center">
+                          {selectedAdapter}
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedAdapter);
+                              // Could add a toast notification here
+                            }}
+                            className="ml-2 text-blue-500 hover:text-blue-700"
+                            title="Copy address"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium text-gray-500 dark:text-gray-400">Token ID</dt>
+                        <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono break-all flex items-center">
+                          {tokenId?.toString()}
+                          <button 
+                            onClick={() => {
+                              if (tokenId) navigator.clipboard.writeText(tokenId.toString());
+                            }}
+                            className="ml-2 text-blue-500 hover:text-blue-700"
+                            title="Copy token ID"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium text-gray-500 dark:text-gray-400">Transaction</dt>
+                        <dd className="mt-1 text-gray-900 dark:text-gray-100">
+                          <a 
+                            href={`https://etherscan.io/tx/${txHash}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="underline hover:text-blue-600 dark:hover:text-blue-400 font-mono text-xs"
+                          >
+                            {txHash?.substring(0, 10)}...{txHash?.substring(txHash.length - 8)}
+                          </a>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                  
+                  <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={addNFTToMetaMask}
+                      className="flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                    >
+                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M22.1 7.83l-9.92-4.7c-.17-.11-.44-.11-.61 0L1.66 7.83c-.3.13-.48.39-.48.7v7.74c0 .53.27 1.02.71 1.31l9.88 5.18c.13.07.27.1.42.1s.29-.03.42-.1l9.88-5.18c.44-.29.71-.78.71-1.31V8.53c0-.31-.18-.57-.48-.7z" />
+                      </svg>
+                      Add to MetaMask
+                    </button>
+                    
+                    <a 
+                      href={getOpenSeaUrl()}
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="underline hover:text-green-800 dark:hover:text-green-300"
+                      className="flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
-                      {txHash?.substring(0, 10)}...{txHash?.substring(txHash.length - 8)}
+                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                      </svg>
+                      View on OpenSea
                     </a>
-                  </p>
-                  {tokenId !== null && (
-                    <p className="mt-2 text-sm">
-                      You can now view your NFT on marketplaces like OpenSea once it's indexed.
-                    </p>
-                  )}
+                  </div>
+
+                  <div className="mt-4 text-xs text-gray-600 dark:text-gray-400">
+                    <p className="font-medium mb-1">Manual Addition to MetaMask:</p>
+                    <ol className="list-decimal pl-5 space-y-1">
+                      <li>Open MetaMask and click on "NFTs" tab</li>
+                      <li>Click "Import NFTs"</li>
+                      <li>Paste the contract address: <span className="font-mono">{selectedAdapter}</span></li>
+                      <li>Enter Token ID: <span className="font-mono">{tokenId?.toString()}</span></li>
+                      <li>Click "Import"</li>
+                    </ol>
+                  </div>
                 </div>
               </div>
             </div>

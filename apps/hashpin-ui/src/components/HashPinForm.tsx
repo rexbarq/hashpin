@@ -320,13 +320,17 @@ export function HashPinForm() {
   const [validNonce, setValidNonce] = useState<number | null>(null)
   const [difficulty, setDifficulty] = useState<number>(0)
   const [isLoadingDifficulty, setIsLoadingDifficulty] = useState(false)
+  const [verifiedSuccess, setVerifiedSuccess] = useState<boolean>(false)
 
   const { writeContract, data: txHash, error: writeError, isPending } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess: txIsSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   })
 
   const isLoading = isPending || isConfirming || isMining || isLoadingDifficulty
+
+  // True success is when transaction is successful and we've verified it was pinned correctly
+  const isSuccess = txIsSuccess && verifiedSuccess
 
   useEffect(() => {
     setMounted(true)
@@ -338,15 +342,51 @@ export function HashPinForm() {
         // This is a simplified approach - in production you should use a proper provider
         // and contract instance
         const provider = new ethers.JsonRpcProvider()
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
-        const difficultyBigInt = await contract.getDifficulty()
-        const difficultyNumber = Number(difficultyBigInt)
-        console.log('Current difficulty from contract:', difficultyNumber)
-        setDifficulty(difficultyNumber)
+        
+        try {
+          // First check if the contract exists
+          const code = await provider.getCode(CONTRACT_ADDRESS)
+          if (code === '0x' || code === '0x0') {
+            console.error('No contract found at address:', CONTRACT_ADDRESS)
+            setErrorMessage(`No contract found at address: ${CONTRACT_ADDRESS}. Please deploy the contract first.`)
+            setDifficulty(4) // Set default difficulty
+            return
+          }
+        } catch (codeError) {
+          console.error('Error checking contract code:', codeError)
+          // Continue anyway, let the getDifficulty check fail if needed
+        }
+        
+        try {
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
+          const difficultyBigInt = await contract.getDifficulty()
+          const difficultyNumber = Number(difficultyBigInt)
+          console.log('Current difficulty from contract:', difficultyNumber)
+          setDifficulty(difficultyNumber)
+        } catch (contractError: any) {
+          console.error('Error calling getDifficulty:', contractError)
+          
+          // Specifically handle the decoding error
+          if (contractError.message?.includes('could not decode result data') || 
+              contractError.message?.includes('BAD_DATA')) {
+            setErrorMessage(`Contract error: The contract at ${CONTRACT_ADDRESS} doesn't seem to be a valid Hashpin contract. Please deploy the correct contract.`)
+          } else if (contractError.message?.includes('call revert exception')) {
+            setErrorMessage('Contract call reverted. The contract may be in an invalid state.')
+          } else {
+            setErrorMessage(`Contract error: ${contractError.message || 'Unknown error calling contract'}`)
+          }
+          
+          // Set a default difficulty
+          setDifficulty(4)
+        }
       } catch (error) {
         console.error('Error fetching difficulty:', error)
         // Set a default difficulty if we cannot fetch from contract
         setDifficulty(4)
+        
+        if (!errorMessage) {
+          setErrorMessage('Failed to connect to contract. Please check your network connection.')
+        }
       } finally {
         setIsLoadingDifficulty(false)
       }
@@ -354,6 +394,50 @@ export function HashPinForm() {
 
     fetchDifficulty()
   }, [])
+
+  useEffect(() => {
+    if (txHash && txIsSuccess) {
+      // Attempt to verify the transaction was actually successful by checking for events
+      const verifyTransaction = async () => {
+        try {
+          console.log('Verifying transaction success...');
+          
+          // This is a simplified approach - in production use a proper provider
+          const provider = new ethers.JsonRpcProvider();
+          
+          // Get transaction receipt
+          const receipt = await provider.getTransactionReceipt(txHash);
+          console.log('Transaction receipt:', receipt);
+          
+          if (!receipt || receipt.status === 0) {
+            console.error('Transaction failed or not found');
+            setErrorMessage('Transaction failed. The contract may not exist at the specified address.');
+            setVerifiedSuccess(false);
+            return;
+          }
+          
+          // Check if there were logs/events emitted (a sign the contract exists and executed our function)
+          if (!receipt.logs || receipt.logs.length === 0) {
+            console.error('No events emitted in transaction. The contract may not exist or the function failed.');
+            setErrorMessage('No events were emitted. The hash may not have been properly pinned.');
+            setVerifiedSuccess(false);
+            return;
+          }
+          
+          // Success - we have events which suggests the contract exists and our function ran
+          console.log('Transaction verified successful with events');
+          setVerifiedSuccess(true);
+          setErrorMessage(null);
+        } catch (error) {
+          console.error('Error verifying transaction:', error);
+          setErrorMessage('Could not verify if the hash was properly pinned.');
+          setVerifiedSuccess(false);
+        }
+      };
+      
+      verifyTransaction();
+    }
+  }, [txHash, txIsSuccess]);
 
   useEffect(() => {
     if (writeError) {
@@ -369,11 +453,16 @@ export function HashPinForm() {
       let errorMsg = 'Failed to write to contract.'
       if (writeError.message?.includes('Internal JSON-RPC error')) {
         errorMsg = 'This hash has already been registered.'
+      } else if (writeError.message?.includes('contract not deployed') || 
+                writeError.message?.includes('address may not exist') ||
+                writeError.message?.includes('cannot estimate gas')) {
+        errorMsg = 'The contract does not exist at the specified address or is not deployed.'
       } else if (writeError.message) {
         errorMsg = `Error: ${writeError.message}`
       }
       
       setErrorMessage(errorMsg)
+      setVerifiedSuccess(false)
     }
   }, [writeError])
 
@@ -770,6 +859,15 @@ export function HashPinForm() {
         {errorMessage && (
           <div className="text-red-500 text-sm mt-2">
             {errorMessage}
+          </div>
+        )}
+        
+        {txIsSuccess && !verifiedSuccess && !errorMessage && (
+          <div className="space-y-4 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <div className="text-yellow-600 dark:text-yellow-400 font-medium">
+              Transaction was processed, but we couldn't verify if the hash was properly pinned.
+              The contract may not exist at the specified address.
+            </div>
           </div>
         )}
         
