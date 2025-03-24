@@ -25,13 +25,13 @@
 
 Registration of all digital content by recording its hash on a widely
 recognised blockchain can solve many issues associated with verifying
-authenticity without resorting to authority \[1\]. Consider the trivial
+authenticity without resorting to authority [1]. Consider the trivial
 use case of proving authenticity of a photograph or video would greatly
-benefit from an ability to prove that it was taken at the claimed time.
+benefit from an ability to prove that it was taken at the claimed time [2].
 
 We propose a universal protocol for pinning hashes that implements the
 bare minimum required to make such a protocol able to sustain its
-continued existence. These components include:
+continued existence in a wider economy. These components include:
 
 1.  The ability to pin (register) a hash and associate it with a
     registrant wallet address,
@@ -40,7 +40,9 @@ continued existence. These components include:
 3.  a utility token that is rewarded for pinning hashes and is required
     for claiming them.
 
-The Hashpin protocol will be managed by an elected Management with
+The Hashpin protocol aims to be self-sustaining. That is, it should
+be able to fund its own development to expand the value it generates
+for its users. It will be managed by an elected Management with
 authority to spend funds collected into the Hashpin Development Fund,
 funded with 2% of tokens from mining and all utility fees. Hashpin
 development will be governed via a DAO, which will be set up within
@@ -55,28 +57,86 @@ could be argued that the hash is the most universal cryptographic
 primitive that escapes confinement to any specific category.
 
 Tagging a hash to a blockchain to prove existence and authenticity has
-been proposed many times for many different reasons: education
-certificates, NFTs, videos, files, etc., but each new use case
-implementation attempt has bred a new standard in an isolated niche. It
-might be argued that choosing a narrow vertical is the right way to
-jumpstart such a standard. We argue that for a truly universal service,
-the hashing service needs to have a narrow horizontal focus; that is, a
-minimal set of features applicable to all content types and use cases.
-Therefore, Hashpin is a universal crypto protocol and associated utility
-token for registering any hash whatsoever, for any purpose.
+been proposed before for many different reasons: timestamping, education
+certificates, NFTs, videos, files, etc., but each proposed use case has
+either been limited in functionality, such as OpenTimestamps [2], which
+run only on Bitcoin and do not have the ability to be extended on their
+native chain, or have been in an isolated niche. These characteristics
+have prevented any previous such protocol from being ubiquitous.
 
-To provide the possibility to use the registered hashes, the protocol
-will be able to be extended by other protocols by implementing their
-interfaces (ex. ERC721) \[2\].
+We argue that for a truly universal service, the tagging service needs
+to have a narrow horizontal focus and be composable with other protocols.
+That is, the protocol should have a minimal set of features applicable 
+to all content types and use cases, and an ability to be integrated with
+other protocols, so its use does not preclude participation in DeFi and 
+integration into other standards, such as ERC721 [3] and ERC1155 [4].
 
-To encourage protocol use and development Hashpin will issue a utility
-token reward for pinning hashes. The token will be required to claim
-hashes using other non-fungible token of the protocols, which will
-ensure long term viability and an incentive for the features to be
-developed.
+Therefore, Hashpin must implement a universal crypto interface in such a 
+way as to enable registering any hash whatsoever, for any purpose.
 
-In addition to the utility fees, the Hashpin protocol team will be
-entitled to 2% of all tokens mined from pinning hashes.
+Furthermore, in order to resist capture by an authority, the protocol 
+should be implemented based on decentralised design principles as 
+outlined by Nikolai Mushegian in his Principles [5], with the exception
+of ossification.
+
+Some proponents of decentralisation have suggested that true
+decentralisation must be accompanied by an absence formal protocol 
+governance, of which the conservative Bitcoin culture is a good example.
+This belief results from the conflation of lack of ability to influence 
+how users transact on the protocol with a lack of ability to influence 
+changes to the protocol rules or, in extreme cases, lack of ability to 
+change the protocol rules altogether. This last attitude is where 
+ossification as a desirable property of a protocol seems to originate.
+
+Even though ossification has proven to be a useful property in accruing
+protocol value through stability, such as in Bitcoin, it has also
+prevented integration of new concepts to generate more value by increasing
+utility. In this case, conservative Bitcoin culture has doubled down on 
+the Store of Value use case and resisted implementing more programmability
+and higher throughput, even though these two properties have proven their 
+value in Ethereum and Solana, respectively. Notably, Ethereum also has not 
+been able to scale throughput due to ossification, while Solana has engaged
+in transaction censorship due to its less decentralised and progressive
+leaning. The result is that Bitcoin, Ethereum, and Solana have materially
+succeeded and failed in different ways.
+
+This conundrum can be best expressed as the eternal and _essential_ 
+struggle between conservatism and progressivism. Both are needed
+for a system to adapt and floursh over extended periods of time. Indeed,
+both are embodied in the mechanisms of life itself.
+
+While lack of control over who uses a protocol and how it is used is
+easy to implement and an indisputable value of user software, as opposed 
+tovsoftware as a service (SaaS), a lack of control over protocol 
+upgrades necessarily results in a limited or total lack of transparency
+and accountability about how such upgrades are proposed and approved.
+
+Even when transparency and accountability have been attempted with
+the use of foundations, such as the Ethereum Foundation for governing
+Ethereum upgrades, a link between the protocol's success in generating
+user value and reward of protocol management for such success has
+remained elusive.
+
+To solve for controlled improvements, Hashpin will implement a rigid
+constitution-like structure to select and incentivise its management
+to implement upgrades that _measurably_ improve the Collective Welfare
+of all users, as proposed by Ralph Merkle in DAO Democracy [6].
+
+To fund its security and governance Hashpin will implement a user 
+benefit-oriented governance and incentive model by:
+1. Issuing a utility token reward to _pin_ hashes via mining, and
+2. requiring the token as a fee to _claim_ hashes for integration into
+use cases via more specialised protocols.
+
+The reward for pinnig is meant to encourage registering as many hashes
+as possible to prove existence of underlying facts, regardless of 
+whether this proof will be needed in the future, while the fee for 
+claiming allows the protocol to have a share in the value that pinning
+has generated for the user.
+
+To sustain its continued development and operation, the Hashpin protocol
+will be funded with to 2% of all tokens mined from pinning hashes and
+100% of claiming fees. 
 
 ## 3. Pinning (Registration) 
 
@@ -84,7 +144,7 @@ The main function of the protocol is to provide a
 `pinHash` function for pinning (registering) any hash. Because
 the hashes need to be for anything at all, there needs to be no
 provision for what the hash represents and the only thing that matters
-is to preserve the time the hash was pinned \[3\] and the wallet address
+is to preserve the time the hash was pinned[7] and the wallet address
 that pinned it.
 
 The `pinHash` function would look something like the
@@ -103,7 +163,7 @@ following:
 function pinHash(bytes32 hashToPin, uint256 nonce) external {
 
     // Step 1: Construct the PoW candidate by concatenating hash and nonce
-    bytes memory powInput = abi.encodePacked(hashToPin, nonce);]
+    bytes memory powInput = abi.encodePacked(hashToPin, nonce);
 
     // Step 2: Compute the keccak256 hash of the concatenated input
     bytes32 powHash = keccak256(powInput);
@@ -144,7 +204,7 @@ and indexing software.
 The protocol must allow for pinning as many hashes as the market needs,
 and so there cannot be a limit on how many hashes can be pinned per unit
 time. This will be accomplished by pinning roots of merkle trees of
-hashes \[4\].
+hashes[8].
 
 For example, someone wishing to pin a large number of hashes will be
 able to construct a merkle tree of arbitrary height and pin only the
@@ -227,7 +287,7 @@ must also include the nonce that was used to pin it, so as to prove that
 it was the base for the pinned target hash.
 
 If we consider the nonce as the path in a merkle tree, the claimHash
-function can be generalised to any merkle tree \[4\].
+function can be generalised to any merkle tree[8].
 
 ![](images/image2.png)
 
@@ -313,7 +373,7 @@ pin it again anyway.
 
 The Hashpin utility token will follow a perpetual, asymptotally
 increasing supply (geometrically decreasing issuance) function with a
-predefined halving schedule of four years, similar to Bitcoin's \[3\].
+predefined halving schedule of four years, similar to Bitcoin's[7].
 The pace of issuance will be controlled by a proof of work function,
 meaning that the hashes that are pinned will have to start with enough
 leading zeros to ensure a limited number of pinned hashes per unit of
@@ -360,10 +420,10 @@ to propose Policy Decisions.
 
 Every halving, Hashpin Management will be up for election with anyone
 staking for the duration of the last halving cycle being eligible to
-vote for new management.This governance model draws from early proposals
-for decentralized autonomous organizations \[5\]. This ensures that only
-committed voters have a say in who leads for the next halving. These
-voters eligible to elect management shall be called _Citizens of Hashpin_.
+vote for new management. This governance model draws from early proposals
+for decentralized autonomous organizations[6]. This ensures that only
+committed holders have a say in who leads for the next halving. The
+holders eligible to elect management shall be called _citizens_ of Hashpin.
 
 A vote of no confidence will be possible with an 80% supermajority of
 voting citizens, which will trigger a new election. The 80%
@@ -392,13 +452,7 @@ halving period, initially set to ⅛ (roughy equivalent to 6 months),
 4.  Supermajority threshold - defined as a percentage of voting weight, 
 initially set to 80%,
 5.  Protocol smart contract upgrades, and
-6.  Dividend payout to _voting citizens_.
-
-In order for the Hashpin Protocol to foster an engaged community,
-Citizens of Hashpin will be required to qualify for dividends by _voting
-in at least 80% of the last 4 years' votes_. The engagement
-requirement is aimed at rewarding long term commitment to the project vs
-short term speculation.
+6.  Dividend payout to _stakers_.
 
 ### Vote Delegation
 
@@ -416,7 +470,7 @@ the Development Fund, will be used to reward the Hashpin management
 board on the basis of a vote by holders of staked/locked tokens. The
 voters will be asked to answer a single yes/no question, "as a
 participant of Hashpin, are you better off today than you were at the
-last poll?" A yes will count as a 1 and a no will count as 0. \[5\] The
+last poll?" A yes will count as a 1 and a no will count as 0 [6]. The
 weight of the vote will be proportional to the number of the voter's
 staked tokens. In order to be eligible to vote, the person will need to
 have staked tokens for longer than the last voting period.
@@ -455,13 +509,22 @@ time to be fully implemented before the rirst halving period ends.
 1.  Szabo, N. (1997). Formalizing and Securing Relationships on Public
     Networks. First Monday, 2(9). Retrieved from
     https://firstmonday.org/ojs/index.php/fm/article/view/548
-2.  Entriken, W., Shirley, D., Evans, J., & Sachs, N. (2017). EIP-721:
+2.  Todd, P. (2016). OpenTimestamps: Scalable, Trust-Minimized 
+    Timestamping. Retrieved from https://opentimestamps.org/
+3.  Entriken, W., Shirley, D., Evans, J., & Sachs, N. (2017). EIP-721:
     Non-Fungible Token Standard. Ethereum Improvement Proposals.
     Retrieved from https://eips.ethereum.org/EIPS/eip-721
-3.  Nakamoto, S. (2008). Bitcoin: A Peer-to-Peer Electronic Cash
+4.  Radomski, W., Cooke, A., Castagnino, P., Bourgogne, J., Lee, A., &
+    Loomer, S. (2018). EIP-1155: Multi Token Standard. Ethereum 
+    Improvement Proposals. Retrieved from 
+    https://eips.ethereum.org/EIPS/eip-1155
+5.  Mushegian, Nikolai (n.d.). Nikolai's Principles: Guidelines for Decentralized
+    Systems. Retrieved from https://chaser.eth.limo/nikolais-principles
+6.  Merkle, R. (2017 version). DAO Democracy: A Draft. Retrieved from
+    https://ralphmerkle.com/papers/DAOdemocracyDraft.pdf
+7.  Nakamoto, S. (2008). Bitcoin: A Peer-to-Peer Electronic Cash
     System. Retrieved from https://bitcoin.org/bitcoin.pdf
-4.  Merkle, R. C. (1979). Secrecy, Authentication, and Public Key
+8.  Merkle, R. C. (1979). Secrecy, Authentication, and Public Key
     Systems. Ph.D. dissertation, Stanford University. Retrieved from
     https://www.ralphmerkle.com/papers/Thesis1979.pdf
-5.  Merkle, R. (2017 version). DAO Democracy: A Draft. Retrieved from
-    https://ralphmerkle.com/papers/DAOdemocracyDraft.pdf
+
