@@ -103,6 +103,8 @@ NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS=your_deployed_adapter_address
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
 ```
 
+> **Note on WalletConnect:** The application can run without a WalletConnect Project ID, but only browser extension wallets like MetaMask will work. If you want to support mobile wallets through WalletConnect, sign up for a free Project ID at [WalletConnect Cloud](https://cloud.walletconnect.com/).
+
 ### Running a Local Blockchain
 
 1. Start a local Hardhat node:
