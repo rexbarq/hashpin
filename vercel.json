@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd ../.. && npm install && cd apps/hashpin-ui && npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "exit 0"
+} 

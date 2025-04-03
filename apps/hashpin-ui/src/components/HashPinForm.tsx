@@ -349,6 +349,14 @@ export function HashPinForm() {
         // and contract instance
         const provider = new ethers.JsonRpcProvider()
         
+        // Add debug logging for network
+        const network = await provider.getNetwork()
+        console.log('🔗 Current Network:', {
+          chainId: network.chainId,
+          name: network.name,
+          contractAddress: CONTRACT_ADDRESS
+        })
+        
         try {
           // First check if the contract exists
           const code = await provider.getCode(CONTRACT_ADDRESS)

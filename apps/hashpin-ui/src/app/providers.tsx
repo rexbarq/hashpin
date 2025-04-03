@@ -55,6 +55,13 @@ const config = createConfig({
   ],
 })
 
+// Add debug logging
+console.log('🌐 Network Configuration:', {
+  chains: chains.map(c => ({ id: c.id, name: c.name })),
+  defaultChain: isDevelopment ? 'hardhat' : 'megaethTestnet',
+  currentEnv: isDevelopment ? 'development' : 'production'
+})
+
 const queryClient = new QueryClient()
 
 createWeb3Modal({
