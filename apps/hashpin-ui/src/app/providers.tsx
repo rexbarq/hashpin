@@ -2,7 +2,7 @@
 
 import { createWeb3Modal } from '@web3modal/wagmi/react'
 import { WagmiProvider, createConfig } from 'wagmi'
-import { hardhat, sepolia } from 'wagmi/chains'
+import { hardhat, sepolia, Chain } from 'wagmi/chains'
 import { http } from 'viem'
 import { walletConnect, injected } from 'wagmi/connectors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -16,7 +16,25 @@ const metadata = {
   icons: ['https://avatars.githubusercontent.com/u/37784886']
 }
 
-const chains = [hardhat, sepolia] as const
+const megaethTestnet = {
+  id: 6342,
+  name: 'MegaETH Testnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'ETH',
+    symbol: 'ETH',
+  },
+  rpcUrls: {
+    default: { http: ['https://carrot.megaeth.com/rpc'] },
+    public: { http: ['https://carrot.megaeth.com/rpc'] },
+  },
+  blockExplorers: {
+    default: { name: 'MegaExplorer', url: 'https://www.megaexplorer.xyz' },
+  },
+  testnet: true,
+} as const satisfies Chain
+
+const chains = [megaethTestnet, hardhat, sepolia] as const
 
 // Configure chains & providers
 const config = createConfig({
@@ -24,6 +42,7 @@ const config = createConfig({
   transports: {
     [hardhat.id]: http(),
     [sepolia.id]: http(),
+    [megaethTestnet.id]: http('https://carrot.megaeth.com/rpc'),
   },
   connectors: [
     injected(),
@@ -40,7 +59,7 @@ const queryClient = new QueryClient()
 createWeb3Modal({
   wagmiConfig: config,
   projectId,
-  defaultChain: hardhat,
+  defaultChain: megaethTestnet,
   themeMode: 'light',
   themeVariables: {
     '--w3m-font-family': 'Inter, sans-serif',
