@@ -307,6 +307,12 @@ const CONTRACT_ABI = [
   }
 ] as const
 
+interface ContractError {
+  message?: string;
+  code?: string | number;
+  data?: unknown;
+}
+
 export function HashPinForm() {
   // All hooks must be called before any conditional returns
   const [mounted, setMounted] = useState(false)
@@ -363,7 +369,8 @@ export function HashPinForm() {
           const difficultyNumber = Number(difficultyBigInt)
           console.log('Current difficulty from contract:', difficultyNumber)
           setDifficulty(difficultyNumber)
-        } catch (contractError: any) {
+        } catch (error: unknown) {
+          const contractError = error as ContractError;
           console.error('Error calling getDifficulty:', contractError)
           
           // Specifically handle the decoding error
@@ -393,7 +400,7 @@ export function HashPinForm() {
     }
 
     fetchDifficulty()
-  }, [])
+  }, [errorMessage])
 
   useEffect(() => {
     if (txHash && txIsSuccess) {
@@ -865,7 +872,7 @@ export function HashPinForm() {
         {txIsSuccess && !verifiedSuccess && !errorMessage && (
           <div className="space-y-4 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
             <div className="text-yellow-600 dark:text-yellow-400 font-medium">
-              Transaction was processed, but we couldn't verify if the hash was properly pinned.
+              Transaction was processed, but we couldn&apos;t verify if the hash was properly pinned.
               The contract may not exist at the specified address.
             </div>
           </div>
