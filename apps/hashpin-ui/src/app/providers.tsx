@@ -45,13 +45,15 @@ const megaethTestnet = {
 } as const satisfies Chain
 
 // Configure chains based on environment
-const defaultChains = isDevelopment 
-  ? [hardhat, megaethTestnet, sepolia] 
-  : [megaethTestnet, hardhat, sepolia]
+const defaultChains = [
+  isDevelopment ? hardhat : megaethTestnet,
+  isDevelopment ? megaethTestnet : hardhat,
+  sepolia
+] as const
 
 // Configure chains & providers with better connection handling
 const config = createConfig({
-  chains: defaultChains,
+  chains: defaultChains as readonly [Chain, ...Chain[]],
   transports: {
     [hardhat.id]: http(),
     [sepolia.id]: http(),
@@ -75,7 +77,7 @@ console.log('🌐 Network Configuration:', {
   defaultChain: isDevelopment ? 'hardhat' : 'megaethTestnet',
   currentEnv: isDevelopment ? 'development' : 'production',
   projectId: projectId ? 'set' : 'not set',
-  connectors: config.connectors.map(c => c.name)
+  mode: 'light'
 })
 
 const queryClient = new QueryClient()
