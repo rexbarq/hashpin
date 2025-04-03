@@ -352,12 +352,20 @@ export function HashPinForm() {
       try {
         setIsLoadingDifficulty(true)
         
-        // Use wagmi's public client instead of raw provider
+        // Get current chain info
         const chainId = await publicClient.getChainId()
         console.log('🔗 Current Network:', {
           chainId,
-          contractAddress: CONTRACT_ADDRESS
+          contractAddress: CONTRACT_ADDRESS,
+          expectedChainId: 6342 // MegaETH testnet
         })
+        
+        // In production, ensure we're on MegaETH testnet
+        if (process.env.NODE_ENV === 'production' && chainId !== 6342) {
+          console.error('Wrong network - expected MegaETH testnet (6342) but got:', chainId)
+          setErrorMessage('Please switch to MegaETH testnet to use this application')
+          return
+        }
         
         try {
           // First check if the contract exists
