@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
 import { ethers } from 'ethers'
 
 // Contract configuration
@@ -328,6 +328,7 @@ export function HashPinForm() {
   const [isLoadingDifficulty, setIsLoadingDifficulty] = useState(false)
   const [verifiedSuccess, setVerifiedSuccess] = useState<boolean>(false)
 
+  const publicClient = usePublicClient()
   const { writeContract, data: txHash, error: writeError, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess: txIsSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -343,24 +344,25 @@ export function HashPinForm() {
 
     // Fetch current difficulty from the contract when component mounts
     const fetchDifficulty = async () => {
+      if (!publicClient) {
+        console.log('No public client available yet')
+        return
+      }
+
       try {
         setIsLoadingDifficulty(true)
-        // This is a simplified approach - in production you should use a proper provider
-        // and contract instance
-        const provider = new ethers.JsonRpcProvider()
         
-        // Add debug logging for network
-        const network = await provider.getNetwork()
+        // Use wagmi's public client instead of raw provider
+        const chainId = await publicClient.getChainId()
         console.log('🔗 Current Network:', {
-          chainId: network.chainId,
-          name: network.name,
+          chainId,
           contractAddress: CONTRACT_ADDRESS
         })
         
         try {
           // First check if the contract exists
-          const code = await provider.getCode(CONTRACT_ADDRESS)
-          if (code === '0x' || code === '0x0') {
+          const code = await publicClient.getBytecode({ address: CONTRACT_ADDRESS as `0x${string}` })
+          if (!code) {
             console.error('No contract found at address:', CONTRACT_ADDRESS)
             setErrorMessage(`No contract found at address: ${CONTRACT_ADDRESS}. Please deploy the contract first.`)
             setDifficulty(4) // Set default difficulty
@@ -372,9 +374,13 @@ export function HashPinForm() {
         }
         
         try {
-          const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
-          const difficultyBigInt = await contract.getDifficulty()
-          const difficultyNumber = Number(difficultyBigInt)
+          const difficulty = await publicClient.readContract({
+            address: CONTRACT_ADDRESS as `0x${string}`,
+            abi: CONTRACT_ABI,
+            functionName: 'getDifficulty',
+          })
+          
+          const difficultyNumber = Number(difficulty)
           console.log('Current difficulty from contract:', difficultyNumber)
           setDifficulty(difficultyNumber)
         } catch (error: unknown) {
@@ -407,24 +413,28 @@ export function HashPinForm() {
       }
     }
 
-    fetchDifficulty()
-  }, [errorMessage])
+    if (publicClient) {
+      fetchDifficulty()
+    }
+  }, [errorMessage, publicClient])
 
   useEffect(() => {
     if (txHash && txIsSuccess) {
       // Attempt to verify the transaction was actually successful by checking for events
       const verifyTransaction = async () => {
+        if (!publicClient) {
+          console.log('No public client available yet')
+          return
+        }
+
         try {
           console.log('Verifying transaction success...');
           
-          // This is a simplified approach - in production use a proper provider
-          const provider = new ethers.JsonRpcProvider();
-          
-          // Get transaction receipt
-          const receipt = await provider.getTransactionReceipt(txHash);
+          // Use wagmi's public client
+          const receipt = await publicClient.getTransactionReceipt({ hash: txHash })
           console.log('Transaction receipt:', receipt);
           
-          if (!receipt || receipt.status === 0) {
+          if (!receipt || receipt.status === 'reverted') {
             console.error('Transaction failed or not found');
             setErrorMessage('Transaction failed. The contract may not exist at the specified address.');
             setVerifiedSuccess(false);
@@ -452,7 +462,7 @@ export function HashPinForm() {
       
       verifyTransaction();
     }
-  }, [txHash, txIsSuccess]);
+  }, [txHash, txIsSuccess, publicClient]);
 
   useEffect(() => {
     if (writeError) {
@@ -729,7 +739,7 @@ export function HashPinForm() {
           claimUrl: `https://hashpin.io/claim?hash=${fileHash}`,
           verifyUrl: `https://hashpin.io/verify?hash=${fileHash}`
         }
-      };
+      }
       
       // Stringify with pretty formatting
       const pinFileJSON = JSON.stringify(pinData, null, 2);
@@ -769,7 +779,6 @@ export function HashPinForm() {
       </div>
     )
   }
-
   return (
     <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-gray-800">
       <form onSubmit={handleSubmit} className="space-y-4">
