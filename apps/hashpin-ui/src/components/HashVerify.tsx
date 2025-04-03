@@ -4,13 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract, usePublicClient } from 'wagmi'
 import { ethers } from 'ethers'
 import { useAccount } from 'wagmi'
-
-// Add type definition for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: any; // Use any to avoid conflicts with existing ethereum definitions
-  }
-}
+import type { WatchAssetParams } from '../types/metamask'
 
 // Contract configuration (same as in HashPinForm)
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || ''
@@ -116,6 +110,30 @@ const CONTRACT_ABI = [
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "verifyHash",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   }
 ] as const
 
@@ -209,6 +227,12 @@ interface PinFile {
   };
 }
 
+interface ContractError {
+  message: string;
+  code?: string | number;
+  data?: unknown;
+}
+
 export function HashClaimForm() {
   // Debug render count
   const renderCount = useRef(0);
@@ -224,8 +248,13 @@ export function HashClaimForm() {
   const [nftMetadata, setNftMetadata] = useState('')
   const [tokenId, setTokenId] = useState<bigint | null>(null)
   const [isFileHovered, setIsFileHovered] = useState(false)
-  const [adapters, setAdapters] = useState(HASHPIN_ADAPTERS)
   const [isHashAlreadyClaimed, setIsHashAlreadyClaimed] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState<{
+    isPinned: boolean;
+    pinner: string;
+    timestamp: number;
+    metadata: string;
+  } | null>(null);
   
   const { writeContract, data: txHash, error: writeError, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess, data: receipt } = useWaitForTransactionReceipt({
@@ -254,18 +283,13 @@ export function HashClaimForm() {
       setMounted(true)
       
       // Log adapter state on initial mount
-      console.log('🔍 COMPONENT MOUNT: Current adapters state:', adapters);
-      
-      // Compare initial state with HASHPIN_ADAPTERS
-      if (adapters.length !== HASHPIN_ADAPTERS.length) {
-        console.warn(`⚠️ Adapter length mismatch: adapters state (${adapters.length}) vs HASHPIN_ADAPTERS (${HASHPIN_ADAPTERS.length})`);
-      }
+      console.log('🔍 COMPONENT MOUNT: Current adapters state:', HASHPIN_ADAPTERS);
       
       // Check for identical objects (possible reference issues)
-      const isStateAReference = adapters === HASHPIN_ADAPTERS;
+      const isStateAReference = HASHPIN_ADAPTERS === HASHPIN_ADAPTERS;
       console.log(`📊 Is adapters state a direct reference to HASHPIN_ADAPTERS? ${isStateAReference}`);
     }
-  }, [mounted, adapters]);
+  }, [mounted]);
 
   // Check if hash is already claimed when a pin file is loaded and adapter is selected
   useEffect(() => {
@@ -395,7 +419,60 @@ export function HashClaimForm() {
     }
   }, [isSuccess, receipt])
 
-  // Function to handle file upload/drop
+  // Add verification function
+  const verifyPinFile = async (pinFile: PinFile) => {
+    if (!pinFile.pinData.powHash) {
+      setErrorMessage('Cannot verify pin file: missing powHash');
+      return;
+    }
+
+    try {
+      console.log('Verifying hash on blockchain...');
+      
+      // Create a public provider for read-only operations
+      const provider = new ethers.JsonRpcProvider();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      
+      // Get hash details from contract
+      const hashDetails = await contract.getHashDetails(pinFile.pinData.powHash);
+      const [pinnerAddress, pinMetadata, pinTimestamp] = hashDetails;
+
+      // Verify the proof using contract's verifyHash function
+      const verifiedPinner = await contract.verifyHash(
+        pinFile.pinData.originalHash,
+        pinFile.pinData.proof
+      );
+
+      // Store verification result
+      setVerificationStatus({
+        isPinned: true,
+        pinner: pinnerAddress,
+        timestamp: Number(pinTimestamp),
+        metadata: pinMetadata,
+      });
+      
+      setErrorMessage(null);
+      console.log('Hash verification successful:', { pinnerAddress, pinTimestamp });
+      
+    } catch (error: unknown) {
+      const contractError = error as ContractError;
+      console.error('Verification error:', contractError);
+      
+      if (contractError.message?.includes('Hash not found') || 
+          contractError.message?.includes('not exist')) {
+        setErrorMessage('This hash has not been pinned on the blockchain.');
+        setVerificationStatus(null);
+      } else if (contractError.message?.includes('invalid proof')) {
+        setErrorMessage('Invalid proof in PIN file. The file may be corrupted or tampered with.');
+        setVerificationStatus(null);
+      } else {
+        setErrorMessage(`Failed to verify hash: ${contractError.message || 'Unknown error'}`);
+        setVerificationStatus(null);
+      }
+    }
+  };
+
+  // Modify handleFileUpload to include verification
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -405,16 +482,9 @@ export function HashClaimForm() {
       const fileContent = await file.text()
       const parsedPinFile = JSON.parse(fileContent) as PinFile
       
-      // Validate the parsed file has the expected structure
+      // Basic format validation
       if (!parsedPinFile.pinData || !parsedPinFile.pinData.originalHash || !parsedPinFile.pinData.proof) {
         throw new Error('Invalid PIN file format')
-      }
-      
-      // Verify that powHash exists
-      if (!parsedPinFile.pinData.powHash || !parsedPinFile.pinData.powHash.startsWith('0x')) {
-        console.warn('PIN file has no valid powHash', parsedPinFile);
-        setErrorMessage('Warning: This PIN file does not contain a valid powHash which is required for verifying the hash on-chain.');
-        // Continue anyway as we'll check again during claim
       }
       
       setPinFile(parsedPinFile)
@@ -424,11 +494,15 @@ export function HashClaimForm() {
         setNftMetadata(parsedPinFile.pinData.metadata)
       }
       
+      // Verify the pin file immediately after validation
+      await verifyPinFile(parsedPinFile);
+      
       console.log('Parsed PIN file:', parsedPinFile)
     } catch (error) {
       console.error('Error parsing PIN file:', error)
       setErrorMessage('Failed to parse PIN file. Please ensure it is a valid .pin file.')
       setPinFile(null)
+      setVerificationStatus(null)
     }
   }
 
@@ -606,15 +680,16 @@ export function HashClaimForm() {
             }
             console.log('✅ On-chain pinner verification passed');
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const contractError = error as ContractError;
           // If this fails, the hash might not exist on-chain
-          console.error('Error getting hash details:', error);
+          console.error('Error getting hash details:', contractError);
           
           // Check for specific "Hash not found" error
-          if (error.message && (
-            error.message.includes('Hash not found') || 
-            error.message.includes('reverted') || 
-            error.message.includes('not exist')
+          if (contractError.message && (
+            contractError.message.includes('Hash not found') || 
+            contractError.message.includes('reverted') || 
+            contractError.message.includes('not exist')
           )) {
             console.error('This hash has not been properly pinned on the blockchain.');
             setErrorMessage('This hash has not been properly pinned on the blockchain. The hash must be successfully pinned before it can be claimed as an NFT.');
@@ -659,11 +734,12 @@ export function HashClaimForm() {
           ],
         });
         console.log('Transaction submitted:', result);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Transaction error:', error);
         
-        // Provide more specific error messages based on the error
-        const errorMsg = error.message || '';
+        // Type guard for error object
+        const contractError = error as ContractError;
+        const errorMsg = contractError.message || '';
         
         if (errorMsg.includes('hash not pinned') || errorMsg.includes('invalid proof')) {
           setErrorMessage('This hash has not been properly pinned or has an invalid proof. Please verify your .pin file.');
@@ -678,9 +754,10 @@ export function HashClaimForm() {
           setErrorMessage(`Failed to claim hash: ${errorMsg}`);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error claiming hash:', error);
-      setErrorMessage(`Failed to claim hash: ${error.message || 'Unknown error'}`);
+      const contractError = error as ContractError;
+      setErrorMessage(`Failed to claim hash: ${contractError.message || 'Unknown error'}`);
     }
   }
 
@@ -695,19 +772,19 @@ export function HashClaimForm() {
   const logAdapters = () => {
     // Count addresses for diagnostic purposes
     const adapterAddressCounts: Record<string, number> = {};
-    adapters.forEach(adapter => {
+    HASHPIN_ADAPTERS.forEach(adapter => {
       adapterAddressCounts[adapter.address] = (adapterAddressCounts[adapter.address] || 0) + 1;
     });
     
     // Find duplicates
     const duplicateAddresses = Object.entries(adapterAddressCounts)
-      .filter(([_, count]) => count > 1)
+      .filter(([, count]) => count > 1)
       .map(([address]) => address);
     
     if (duplicateAddresses.length > 0) {
       console.warn('⚠️ DUPLICATE ADDRESSES DETECTED in dropdown:', 
         duplicateAddresses.map(address => {
-          const dupes = adapters.filter(a => a.address === address);
+          const dupes = HASHPIN_ADAPTERS.filter(a => a.address === address);
           return {
             address,
             count: dupes.length,
@@ -718,7 +795,7 @@ export function HashClaimForm() {
     }
     
     // Annotate adapters with index for debugging
-    return adapters.map((adapter, index) => ({
+    return HASHPIN_ADAPTERS.map((adapter, index) => ({
       ...adapter,
       _debugIndex: index
     }));
@@ -740,8 +817,8 @@ export function HashClaimForm() {
       }
 
       // Get the adapter contract to fetch token information
-      const adapterName = adapters.find(a => a.address === selectedAdapter)?.name || 'Hashpin NFT';
-      const adapterType = adapters.find(a => a.address === selectedAdapter)?.type || 'ERC721';
+      const adapterName = HASHPIN_ADAPTERS.find(a => a.address === selectedAdapter)?.name || 'Hashpin NFT';
+      const adapterType = HASHPIN_ADAPTERS.find(a => a.address === selectedAdapter)?.type || 'ERC721';
       
       console.log('Requesting MetaMask to watch NFT asset:', {
         address: selectedAdapter,
@@ -758,7 +835,8 @@ export function HashClaimForm() {
           options: {
             address: selectedAdapter, // The NFT contract address
             tokenId: tokenId.toString(), // The token ID as a string
-          },
+            symbol: adapterName,
+          } as WatchAssetParams,
         },
       });
 
@@ -837,8 +915,8 @@ export function HashClaimForm() {
         
         {pinFile && (
           <>
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <h3 className="font-medium text-blue-800 dark:text-blue-300 mb-2">PIN File Information</h3>
+            <div className={`p-4 ${verificationStatus ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'} rounded-lg border ${verificationStatus ? 'border-blue-200 dark:border-blue-800' : 'border-yellow-200 dark:border-yellow-800'}`}>
+              <h3 className={`font-medium ${verificationStatus ? 'text-blue-800 dark:text-blue-300' : 'text-yellow-800 dark:text-yellow-300'} mb-2`}>PIN File Information</h3>
               <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 text-sm">
                 <div className="sm:col-span-2">
                   <dt className="font-medium text-gray-500 dark:text-gray-400">File Name</dt>
@@ -850,12 +928,64 @@ export function HashClaimForm() {
                     {pinFile.pinData.originalHash}
                   </dd>
                 </div>
-                <div>
-                  <dt className="font-medium text-gray-500 dark:text-gray-400">Pinner</dt>
-                  <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono text-xs">
-                    {pinFile.pinnerInfo.address}
-                  </dd>
-                </div>
+                
+                {!verificationStatus && !errorMessage && (
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center mt-2">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span className="text-yellow-600 dark:text-yellow-400">Verifying hash on blockchain...</span>
+                    </div>
+                  </div>
+                )}
+
+                {errorMessage && (
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-gray-500 dark:text-gray-400">Verification Status</dt>
+                    <dd className="mt-1 text-red-600 dark:text-red-400 flex items-center">
+                      <svg className="h-5 w-5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      {errorMessage}
+                    </dd>
+                  </div>
+                )}
+
+                {verificationStatus && (
+                  <>
+                    <div>
+                      <dt className="font-medium text-gray-500 dark:text-gray-400">Verification Status</dt>
+                      <dd className="mt-1 text-green-600 dark:text-green-400 flex items-center">
+                        <svg className="h-5 w-5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Verified on blockchain
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-gray-500 dark:text-gray-400">Original Pinner</dt>
+                      <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono text-xs break-all">
+                        {verificationStatus.pinner}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-gray-500 dark:text-gray-400">Pin Timestamp</dt>
+                      <dd className="mt-1 text-gray-900 dark:text-gray-100">
+                        {new Date(verificationStatus.timestamp * 1000).toLocaleString()}
+                      </dd>
+                    </div>
+                    {verificationStatus.metadata && (
+                      <div className="sm:col-span-2">
+                        <dt className="font-medium text-gray-500 dark:text-gray-400">Original Metadata</dt>
+                        <dd className="mt-1 text-gray-900 dark:text-gray-100 break-words">
+                          {verificationStatus.metadata}
+                        </dd>
+                      </div>
+                    )}
+                  </>
+                )}
               </dl>
             </div>
             
@@ -908,164 +1038,92 @@ export function HashClaimForm() {
                 disabled={isLoading}
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                This metadata will be stored with your NFT (pre-filled with original metadata)
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {selectedAdapter === adapters[0].address ? 
-                  "For ERC721 adapters, this can be a JSON string with NFT metadata properties" : 
-                  "For ERC1155 adapters, this is typically used for collection-wide properties"}
+                Optional: Add any additional metadata for your NFT in JSON format
               </p>
             </div>
             
-            <button
-              type="submit"
-              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                isLoading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-              }`}
-              disabled={isLoading || isHashAlreadyClaimed}
-            >
-              {isPending ? 'Claiming...' : isConfirming ? 'Confirming...' : isHashAlreadyClaimed ? 'Hash Already Claimed' : 'Claim as NFT'}
-            </button>
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading || !pinFile || !selectedAdapter}
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  isLoading || !pinFile || !selectedAdapter
+                    ? 'bg-blue-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                }`}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  'Claim as NFT'
+                )}
+              </button>
+            </div>
+            
+            {/* Success Message */}
+            {isSuccess && (
+              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  Successfully claimed hash as NFT! Token ID: {tokenId}
+                </p>
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={addNFTToMetaMask}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                  >
+                    Add to MetaMask
+                  </button>
+                  <a
+                    href={getOpenSeaUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    View on OpenSea
+                  </a>
+                </div>
+              </div>
+            )}
+            
+            {/* Already Claimed Message */}
+            {isHashAlreadyClaimed && (
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  This hash has already been claimed as an NFT. You can view it on OpenSea.
+                </p>
+                <div className="mt-4">
+                  <a
+                    href={getOpenSeaUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    View on OpenSea
+                  </a>
+                </div>
+              </div>
+            )}
           </>
         )}
-        
-        {errorMessage && (
-          <div className="p-4 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-lg">
-            <div className="flex">
-              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-              </svg>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Error</h3>
-                <div className="mt-1 text-sm text-red-700 dark:text-red-400">
-                  {errorMessage}
-                  {/* Add a help message for common errors */}
-                  {errorMessage.includes('not been properly pinned') && (
-                    <div className="mt-2 text-xs">
-                      <p>For a hash to be claimable as an NFT, it must first be properly pinned on the blockchain.</p>
-                      <p className="mt-1">Possible reasons for this error:</p>
-                      <ul className="list-disc pl-5 mt-1 space-y-1">
-                        <li>The hash was never successfully pinned (the transaction may have failed)</li>
-                        <li>You're connected to a different network than where the hash was pinned</li>
-                        <li>The .pin file contains incorrect proof data</li>
-                        <li>The contract address in your environment doesn't match the one used for pinning</li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {isSuccess && (
-          <div className="p-4 border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 rounded-lg">
-            <div className="flex">
-              <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-              </svg>
-              <div className="ml-3 w-full">
-                <h3 className="text-sm font-medium text-green-800 dark:text-green-300">Success</h3>
-                <div className="mt-2 text-sm text-green-700 dark:text-green-400">
-                  <p className="font-medium">Hash successfully claimed as NFT!</p>
-                  
-                  <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded border border-green-200 dark:border-green-800">
-                    <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">NFT Details</h4>
-                    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs">
-                      <div>
-                        <dt className="font-medium text-gray-500 dark:text-gray-400">Contract Address</dt>
-                        <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono break-all flex items-center">
-                          {selectedAdapter}
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(selectedAdapter);
-                              // Could add a toast notification here
-                            }}
-                            className="ml-2 text-blue-500 hover:text-blue-700"
-                            title="Copy address"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-gray-500 dark:text-gray-400">Token ID</dt>
-                        <dd className="mt-1 text-gray-900 dark:text-gray-100 font-mono break-all flex items-center">
-                          {tokenId?.toString()}
-                          <button 
-                            onClick={() => {
-                              if (tokenId) navigator.clipboard.writeText(tokenId.toString());
-                            }}
-                            className="ml-2 text-blue-500 hover:text-blue-700"
-                            title="Copy token ID"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-gray-500 dark:text-gray-400">Transaction</dt>
-                        <dd className="mt-1 text-gray-900 dark:text-gray-100">
-                          <a 
-                            href={`https://etherscan.io/tx/${txHash}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="underline hover:text-blue-600 dark:hover:text-blue-400 font-mono text-xs"
-                          >
-                            {txHash?.substring(0, 10)}...{txHash?.substring(txHash.length - 8)}
-                          </a>
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                  
-                  <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={addNFTToMetaMask}
-                      className="flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-                    >
-                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M22.1 7.83l-9.92-4.7c-.17-.11-.44-.11-.61 0L1.66 7.83c-.3.13-.48.39-.48.7v7.74c0 .53.27 1.02.71 1.31l9.88 5.18c.13.07.27.1.42.1s.29-.03.42-.1l9.88-5.18c.44-.29.71-.78.71-1.31V8.53c0-.31-.18-.57-.48-.7z" />
-                      </svg>
-                      Add to MetaMask
-                    </button>
-                    
-                    <a 
-                      href={getOpenSeaUrl()}
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-                      </svg>
-                      View on OpenSea
-                    </a>
-                  </div>
-
-                  <div className="mt-4 text-xs text-gray-600 dark:text-gray-400">
-                    <p className="font-medium mb-1">Manual Addition to MetaMask:</p>
-                    <ol className="list-decimal pl-5 space-y-1">
-                      <li>Open MetaMask and click on "NFTs" tab</li>
-                      <li>Click "Import NFTs"</li>
-                      <li>Paste the contract address: <span className="font-mono">{selectedAdapter}</span></li>
-                      <li>Enter Token ID: <span className="font-mono">{tokenId?.toString()}</span></li>
-                      <li>Click "Import"</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </form>
+      
+      {/* Help Section */}
+      <div className="mt-8 border-t pt-6 dark:border-gray-700">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">How to claim your hash as NFT</h3>
+        <ol className="mt-4 list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <li>Open MetaMask and click on &quot;NFTs&quot; tab</li>
+          <li>Click &quot;Import NFTs&quot; button</li>
+          <li>Enter the contract address and token ID</li>
+          <li>Click &quot;Add&quot; to import your NFT</li>
+        </ol>
+      </div>
     </div>
   )
 } 
