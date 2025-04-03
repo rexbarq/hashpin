@@ -433,55 +433,70 @@ export function HashClaimForm() {
 
     try {
       console.log('Verifying hash on blockchain...');
+      const chainId = await publicClient.getChainId();
+      console.log('Current network:', chainId);
+      console.log('PIN file network:', pinFile.blockchainInfo.networkId);
       
       // Get hash details from contract using wagmi's publicClient
-      const hashDetails = await publicClient.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        abi: CONTRACT_ABI,
-        functionName: 'getHashDetails',
-        args: [pinFile.pinData.powHash as `0x${string}`],
-      });
+      try {
+        const hashDetails = await publicClient.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          abi: CONTRACT_ABI,
+          functionName: 'getHashDetails',
+          args: [pinFile.pinData.powHash as `0x${string}`],
+        });
 
-      // Extract values from the result tuple
-      const [pinnerAddress, pinMetadata, pinTimestamp] = hashDetails as [string, string, bigint];
+        // Extract values from the result tuple
+        const [pinnerAddress, pinMetadata, pinTimestamp] = hashDetails as [string, string, bigint];
 
-      // Verify the proof using contract's verifyHash function
-      const verifiedPinner = await publicClient.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        abi: CONTRACT_ABI,
-        functionName: 'verifyHash',
-        args: [
-          pinFile.pinData.originalHash as `0x${string}`,
-          pinFile.pinData.proof as `0x${string}`[]
-        ],
-      });
-
-      // Store verification result
-      setVerificationStatus({
-        isPinned: true,
-        pinner: pinnerAddress,
-        timestamp: Number(pinTimestamp),
-        metadata: pinMetadata,
-      });
-      
-      setErrorMessage(null);
-      console.log('Hash verification successful:', { pinnerAddress, pinTimestamp });
-      
-    } catch (error: unknown) {
-      const contractError = error as ContractError;
-      console.error('Verification error:', contractError);
-      
-      if (contractError.message?.includes('Hash not found') || 
-          contractError.message?.includes('not exist')) {
-        setErrorMessage('This hash has not been pinned on the blockchain.');
-        setVerificationStatus(null);
-      } else if (contractError.message?.includes('invalid proof')) {
-        setErrorMessage('Invalid proof in PIN file. The file may be corrupted or tampered with.');
-        setVerificationStatus(null);
-      } else {
-        setErrorMessage(`Failed to verify hash: ${contractError.message || 'Unknown error'}`);
-        setVerificationStatus(null);
+        // Store verification result
+        setVerificationStatus({
+          isPinned: true,
+          pinner: pinnerAddress,
+          timestamp: Number(pinTimestamp),
+          metadata: pinMetadata,
+        });
+        
+        setErrorMessage(null);
+        console.log('Hash verification successful:', { pinnerAddress, pinTimestamp });
+      } catch (error: any) {
+        console.error('Contract error details:', error);
+        
+        // Check if the error is because the hash is not found
+        if (error.message?.includes('Hash not found') || 
+            error.message?.includes('revert') || 
+            error.message?.includes('execution reverted')) {
+          
+          // Normalize network IDs - treat 1337 and 31337 as the same (Hardhat/localhost)
+          const isLocalNetwork = (id: number) => id === 1337 || id === 31337;
+          const currentIsLocal = isLocalNetwork(chainId);
+          const pinFileIsLocal = isLocalNetwork(pinFile.blockchainInfo.networkId);
+          
+          // Get network name based on ID
+          const getNetworkName = (id: number) => {
+            if (isLocalNetwork(id)) return 'Local Network (Hardhat/Localhost)';
+            if (id === 6342) return 'MegaETH';
+            return `Chain #${id}`;
+          };
+          
+          const currentNetworkName = getNetworkName(chainId);
+          const pinFileNetworkName = getNetworkName(pinFile.blockchainInfo.networkId);
+          
+          // Only show network mismatch if they're actually different networks
+          if (currentIsLocal === pinFileIsLocal) {
+            setErrorMessage(`This hash has not been pinned on ${currentNetworkName}`);
+          } else {
+            setErrorMessage(`This hash was pinned on ${pinFileNetworkName} but you are currently on ${currentNetworkName}`);
+          }
+          setVerificationStatus(null);
+          return;
+        }
+        throw error; // Re-throw other errors
       }
+    } catch (error) {
+      console.error('Verification error:', error);
+      setErrorMessage(`Failed to verify hash: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setVerificationStatus(null);
     }
   };
 
