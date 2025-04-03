@@ -8,11 +8,12 @@ import { walletConnect, injected } from 'wagmi/connectors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 const metadata = {
   name: 'Hashpin Protocol',
   description: 'Pin cryptographic hashes to the blockchain',
-  url: 'http://localhost:3000',
+  url: isDevelopment ? 'http://localhost:3000' : 'https://hashpin-ui.vercel.app',
   icons: ['https://avatars.githubusercontent.com/u/37784886']
 }
 
@@ -59,7 +60,7 @@ const queryClient = new QueryClient()
 createWeb3Modal({
   wagmiConfig: config,
   projectId,
-  defaultChain: megaethTestnet,
+  defaultChain: isDevelopment ? hardhat : megaethTestnet,
   themeMode: 'light',
   themeVariables: {
     '--w3m-font-family': 'Inter, sans-serif',
