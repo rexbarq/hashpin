@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "cd ../.. && npm install && npx nx build hashpin-ui",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
+  "installCommand": "exit 0",
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": "../../dist/apps/hashpin-ui"
 } 
