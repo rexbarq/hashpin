@@ -1,14 +1,23 @@
 'use client'
 
 import { createWeb3Modal } from '@web3modal/wagmi/react'
-import { WagmiProvider, createConfig } from 'wagmi'
+import { WagmiProvider, createConfig, type Config } from 'wagmi'
 import { hardhat, sepolia, Chain } from 'wagmi/chains'
 import { http } from 'viem'
 import { walletConnect, injected } from 'wagmi/connectors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
 const isDevelopment = process.env.NODE_ENV === 'development'
+
+// Add early debug logging for environment variables
+console.log('🔑 Environment Check:', {
+  projectId,
+  isDevelopment,
+  nodeEnv: process.env.NODE_ENV,
+  hasProjectId: Boolean(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID)
+})
 
 const metadata = {
   name: 'Hashpin Protocol',
@@ -35,11 +44,14 @@ const megaethTestnet = {
   testnet: true,
 } as const satisfies Chain
 
-const chains = [megaethTestnet, hardhat, sepolia] as const
+// Configure chains based on environment
+const defaultChains = isDevelopment 
+  ? [hardhat, megaethTestnet, sepolia] 
+  : [megaethTestnet, hardhat, sepolia]
 
-// Configure chains & providers
+// Configure chains & providers with better connection handling
 const config = createConfig({
-  chains,
+  chains: defaultChains,
   transports: {
     [hardhat.id]: http(),
     [sepolia.id]: http(),
@@ -52,16 +64,18 @@ const config = createConfig({
     walletConnect({
       projectId,
       metadata,
-      showQrModal: true
+      showQrModal: true,
     })
   ],
 })
 
 // Add debug logging
 console.log('🌐 Network Configuration:', {
-  chains: chains.map(c => ({ id: c.id, name: c.name })),
+  chains: defaultChains.map(c => ({ id: c.id, name: c.name })),
   defaultChain: isDevelopment ? 'hardhat' : 'megaethTestnet',
-  currentEnv: isDevelopment ? 'development' : 'production'
+  currentEnv: isDevelopment ? 'development' : 'production',
+  projectId: projectId ? 'set' : 'not set',
+  connectors: config.connectors.map(c => c.name)
 })
 
 const queryClient = new QueryClient()
@@ -77,13 +91,29 @@ createWeb3Modal({
   },
 })
 
-// Export providers with the correct chain order to ensure MegaETH is default in production
+// Add debug logging for Web3Modal initialization
+console.log('🔌 Web3Modal Configuration:', {
+  defaultChain: isDevelopment ? 'hardhat' : 'megaethTestnet',
+  chainId: isDevelopment ? hardhat.id : megaethTestnet.id,
+  projectId: projectId ? 'set' : 'not set',
+  mode: 'light'
+})
+
+// Export providers with the correct chain order
 export function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // Clear any stale connection requests on mount
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('wagmi.connected')
+      localStorage.removeItem('wagmi.wallet')
+      localStorage.removeItem('wc@2:core:0.3//keychain')
+      localStorage.removeItem('wc@2:client:0.3//session')
+      console.log('📱 Providers mounted, cleared stale connections')
+    }
+  }, [])
+
   return (
-    <WagmiProvider config={{
-      ...config,
-      chains: isDevelopment ? [hardhat, megaethTestnet, sepolia] : [megaethTestnet, hardhat, sepolia]
-    }}>
+    <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>

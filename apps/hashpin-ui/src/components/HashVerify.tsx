@@ -426,22 +426,35 @@ export function HashClaimForm() {
       return;
     }
 
+    if (!publicClient) {
+      console.log('No public client available yet');
+      return;
+    }
+
     try {
       console.log('Verifying hash on blockchain...');
       
-      // Create a public provider for read-only operations
-      const provider = new ethers.JsonRpcProvider();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-      
-      // Get hash details from contract
-      const hashDetails = await contract.getHashDetails(pinFile.pinData.powHash);
-      const [pinnerAddress, pinMetadata, pinTimestamp] = hashDetails;
+      // Get hash details from contract using wagmi's publicClient
+      const hashDetails = await publicClient.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        abi: CONTRACT_ABI,
+        functionName: 'getHashDetails',
+        args: [pinFile.pinData.powHash as `0x${string}`],
+      });
+
+      // Extract values from the result tuple
+      const [pinnerAddress, pinMetadata, pinTimestamp] = hashDetails as [string, string, bigint];
 
       // Verify the proof using contract's verifyHash function
-      const verifiedPinner = await contract.verifyHash(
-        pinFile.pinData.originalHash,
-        pinFile.pinData.proof
-      );
+      const verifiedPinner = await publicClient.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        abi: CONTRACT_ABI,
+        functionName: 'verifyHash',
+        args: [
+          pinFile.pinData.originalHash as `0x${string}`,
+          pinFile.pinData.proof as `0x${string}`[]
+        ],
+      });
 
       // Store verification result
       setVerificationStatus({
