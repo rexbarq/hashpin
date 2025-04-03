@@ -46,7 +46,9 @@ const config = createConfig({
     [megaethTestnet.id]: http('https://carrot.megaeth.com/rpc'),
   },
   connectors: [
-    injected(),
+    injected({
+      shimDisconnect: true,
+    }),
     walletConnect({
       projectId,
       metadata,
@@ -64,6 +66,7 @@ console.log('🌐 Network Configuration:', {
 
 const queryClient = new QueryClient()
 
+// Create Web3Modal with the correct default chain
 createWeb3Modal({
   wagmiConfig: config,
   projectId,
@@ -72,14 +75,15 @@ createWeb3Modal({
   themeVariables: {
     '--w3m-font-family': 'Inter, sans-serif',
   },
-  includeWalletIds: undefined,
-  excludeWalletIds: undefined,
-  featuredWalletIds: undefined,
 })
 
+// Export providers with the correct chain order to ensure MegaETH is default in production
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={{
+      ...config,
+      chains: isDevelopment ? [hardhat, megaethTestnet, sepolia] : [megaethTestnet, hardhat, sepolia]
+    }}>
       <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>
