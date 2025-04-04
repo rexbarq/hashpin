@@ -776,46 +776,46 @@ export function HashPinForm() {
   // Render loading state if not mounted
   if (!mounted) {
     return (
-      <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-gray-800">
+      <div className="p-4 border border-gray-800 rounded-lg bg-black">
         <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+          <div className="h-4 bg-gray-900 rounded w-3/4"></div>
+          <div className="h-10 bg-gray-900 rounded"></div>
+          <div className="h-4 bg-gray-900 rounded w-1/2"></div>
+          <div className="h-10 bg-gray-900 rounded"></div>
+          <div className="h-10 bg-gray-900 rounded w-1/4"></div>
         </div>
       </div>
     )
   }
   return (
-    <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-gray-800">
+    <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="file" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="file" className="block text-sm font-medium text-gray-300">
             Select a file to hash and pin
           </label>
           <input
             type="file"
             id="file"
             onChange={handleFileChange}
-            className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-700 dark:file:text-gray-200"
+            className="mt-1 block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-black file:text-green-400 file:border file:border-green-400 hover:file:bg-green-400 hover:file:text-black"
             disabled={isLoading}
           />
         </div>
         
         {fileHash && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="block text-sm font-medium text-gray-300">
               File Hash
             </label>
-            <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono break-all">
+            <div className="mt-1 p-2 bg-black border border-gray-800 rounded-md text-xs font-mono break-all text-gray-300">
               {fileHash}
             </div>
           </div>
         )}
         
         <div>
-          <label htmlFor="metadata" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="metadata" className="block text-sm font-medium text-gray-300">
             Metadata (optional)
           </label>
           <input
@@ -824,30 +824,30 @@ export function HashPinForm() {
             value={metadata}
             onChange={(e) => setMetadata(e.target.value)}
             placeholder="Add some metadata about this file"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="mt-1 block w-full rounded-md border-gray-800 bg-black text-gray-300 shadow-sm focus:border-green-400 focus:ring-green-400 placeholder-gray-600"
             disabled={isLoading}
           />
         </div>
         
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label className="block text-sm font-medium text-gray-300">
             Current Difficulty: {isLoadingDifficulty ? 'Loading...' : `${difficulty} bits`}
           </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500">
             The proof-of-work requires finding a hash with {difficulty} leading zero bits
           </p>
         </div>
         
         {isMining && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="block text-sm font-medium text-gray-300">
               Mining Proof of Work (Difficulty: {difficulty} bits)
             </label>
             <div className="mt-1">
-              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                <div className="bg-blue-600 h-2.5 rounded-full animate-pulse" style={{ width: '100%' }}></div>
+              <div className="w-full bg-gray-900 rounded-full h-2.5">
+                <div className="bg-green-400 h-2.5 rounded-full animate-pulse" style={{ width: '100%' }}></div>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 Tried {miningProgress.toLocaleString()} nonces...
               </p>
             </div>
@@ -856,10 +856,10 @@ export function HashPinForm() {
         
         {validNonce !== null && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="block text-sm font-medium text-gray-300">
               Valid Nonce Found
             </label>
-            <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono">
+            <div className="mt-1 p-2 bg-black border border-gray-800 rounded-md text-xs font-mono text-gray-300">
               {validNonce}
             </div>
           </div>
@@ -867,10 +867,10 @@ export function HashPinForm() {
 
         {powHash && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="block text-sm font-medium text-gray-300">
               Proof-of-Work Hash
             </label>
-            <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-900 rounded-md text-xs font-mono break-all">
+            <div className="mt-1 p-2 bg-black border border-gray-800 rounded-md text-xs font-mono break-all text-gray-300">
               {powHash}
             </div>
           </div>
@@ -878,10 +878,10 @@ export function HashPinForm() {
         
         <button
           type="submit"
-          className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+          className={`w-full flex justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium ${
             isLoading
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+              ? 'bg-gray-800 border-gray-700 text-gray-400 cursor-not-allowed'
+              : 'bg-black text-green-400 border-green-400 hover:bg-green-400 hover:text-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400'
           }`}
           disabled={isLoading || !fileHash}
         >
@@ -889,14 +889,14 @@ export function HashPinForm() {
         </button>
         
         {errorMessage && (
-          <div className="text-red-500 text-sm mt-2">
+          <div className="text-red-400 text-sm mt-2">
             {errorMessage}
           </div>
         )}
         
         {txIsSuccess && !verifiedSuccess && !errorMessage && (
-          <div className="space-y-4 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <div className="text-yellow-600 dark:text-yellow-400 font-medium">
+          <div className="space-y-4 bg-yellow-900/20 p-4 rounded-lg border border-yellow-900">
+            <div className="text-yellow-500 font-medium">
               Transaction was processed, but we couldn&apos;t verify if the hash was properly pinned.
               The contract may not exist at the specified address.
             </div>
@@ -904,15 +904,15 @@ export function HashPinForm() {
         )}
         
         {isSuccess && (
-          <div className="space-y-4 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-            <div className="text-green-600 dark:text-green-400 font-medium">
+          <div className="space-y-4 bg-green-900/20 p-4 rounded-lg border border-green-900">
+            <div className="text-green-400 font-medium">
               Hash successfully pinned to the blockchain!
             </div>
             
             <button
               type="button"
               onClick={handleDownloadPinFile}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="w-full flex justify-center py-2 px-4 border border-green-400 rounded-md shadow-sm text-sm font-medium text-green-400 bg-black hover:bg-green-400 hover:text-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400"
             >
               Download .pin File
             </button>

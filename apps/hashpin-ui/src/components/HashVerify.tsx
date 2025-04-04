@@ -883,24 +883,26 @@ export function HashClaimForm() {
     }
   };
 
-  // Render loading state
+  // Render loading state if not mounted
   if (!mounted) {
     return (
-      <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-gray-800">
+      <div className="p-4 border border-gray-800 rounded-lg bg-black">
         <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-900 rounded w-3/4"></div>
+          <div className="h-10 bg-gray-900 rounded"></div>
+          <div className="h-4 bg-gray-900 rounded w-1/2"></div>
+          <div className="h-10 bg-gray-900 rounded"></div>
+          <div className="h-10 bg-gray-900 rounded w-1/4"></div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-gray-800">
+    <div className="space-y-4">
       <form onSubmit={handleClaim} className="space-y-4">
         <div>
-          <label htmlFor="pin-file" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="pin-file" className="block text-sm font-medium text-gray-300">
             Select a .pin file to claim as NFT
           </label>
           
@@ -1018,7 +1020,7 @@ export function HashClaimForm() {
             </div>
             
             <div>
-              <label htmlFor="adapter" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="adapter" className="block text-sm font-medium text-gray-300">
                 Select NFT Adapter
               </label>
               <select
@@ -1053,7 +1055,7 @@ export function HashClaimForm() {
             </div>
             
             <div>
-              <label htmlFor="nft-metadata" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="nft-metadata" className="block text-sm font-medium text-gray-300">
                 NFT Metadata
               </label>
               <textarea
@@ -1073,12 +1075,12 @@ export function HashClaimForm() {
             <div>
               <button
                 type="submit"
-                disabled={isLoading || !pinFile || !selectedAdapter}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                className={`w-full flex justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium ${
                   isLoading || !pinFile || !selectedAdapter
-                    ? 'bg-blue-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                    ? 'bg-gray-800 border-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-black text-green-400 border-green-400 hover:bg-green-400 hover:text-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400'
                 }`}
+                disabled={isLoading || !pinFile || !selectedAdapter}
               >
                 {isLoading ? (
                   <>
