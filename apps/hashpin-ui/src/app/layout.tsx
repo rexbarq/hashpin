@@ -6,8 +6,21 @@ import { ClientProviders } from "./client-providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Hashpin Protocol",
-  description: "Pin cryptographic hashes to the blockchain",
+  title: "HashPin Protocol",
+  description: "A protocol for proving the existence and ownership of anything",
+  icons: {
+    icon: [
+      {
+        url: '/favicon.ico',
+        sizes: 'any',
+      },
+      {
+        url: '/icon.svg',
+        type: 'image/svg+xml',
+      }
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({
