@@ -170,6 +170,73 @@ Features:
 - Hash verification
 - Transaction status tracking
 
+## Environments and Deployment
+
+The Hashpin protocol uses a multi-environment setup for reliable development and deployment:
+
+### Development Environment
+- Local development environment using Hardhat node
+- Accessible at `localhost:3000`
+- Uses local blockchain at `http://127.0.0.1:8545`
+- Suitable for rapid development and testing
+
+### System Integration Testing (SIT)
+- Pre-production environment for integration testing
+- Deployed at: `sit.hashpin.org`
+- Connected to MegaETH testnet
+- Used for:
+  - Integration testing
+  - User acceptance testing
+  - Performance testing
+  - Feature validation
+
+### Production Environment
+- Live production environment
+- Deployed at: `hashpin.org`
+- Connected to MegaETH mainnet
+- Production-grade infrastructure
+- Continuous monitoring and alerting
+
+### Environment Configuration
+Each environment has its own configuration:
+
+```bash
+# Development (.env.local)
+NEXT_PUBLIC_CONTRACT_ADDRESS=local_contract_address
+NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS=local_adapter_address
+NEXT_PUBLIC_ENVIRONMENT=development
+
+# SIT (.env.sit)
+NEXT_PUBLIC_CONTRACT_ADDRESS=sit_contract_address
+NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS=sit_adapter_address
+NEXT_PUBLIC_ENVIRONMENT=sit
+
+# Production (.env.production)
+NEXT_PUBLIC_CONTRACT_ADDRESS=prod_contract_address
+NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS=prod_adapter_address
+NEXT_PUBLIC_ENVIRONMENT=production
+```
+
+### Deployment Process
+1. **Development**
+   - Local testing and development
+   - Unit tests must pass
+   - Code review required
+
+2. **SIT Deployment**
+   - Automated deployment from `sit` branch
+   - Integration tests must pass
+   - Performance tests must meet thresholds
+   - Manual QA verification
+
+3. **Production Deployment**
+   - Automated deployment from `production` branch
+   - Requires manual approval
+   - Zero-downtime deployment
+   - Automated rollback on failure
+
+For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md)
+
 ## License
 
 MIT
