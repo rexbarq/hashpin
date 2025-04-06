@@ -55,8 +55,7 @@ jobs:
           # Important: Use a token with write access to push the commit
           # Using secrets.GITHUB_TOKEN might require workflow permission adjustments
           # Consider using a Personal Access Token (PAT) if needed
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       # --- Approval Gate is implicitly handled by the 'environment: production' setting ---
       # The workflow will pause here until a reviewer approves in the GitHub UI.
       
