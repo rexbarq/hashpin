@@ -1,0 +1,112 @@
+name: SIT Deployment
+
+on:
+  push:
+    branches:
+      - sit
+
+env:
+  NODE_VERSION: 16
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Build Packages
+        run: npm run build
+        
+      - name: Run Tests
+        run: |
+          cd packages/hashpin-contracts
+          npm run test
+          cd ../../apps/hashpin-ui
+          npm run test
+
+  deploy-contracts:
+    name: Deploy Smart Contracts
+    needs: test
+    runs-on: ubuntu-latest
+    environment: sit
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install Dependencies
+        run: |
+          cd packages/hashpin-contracts
+          npm ci
+          
+      - name: Deploy to MegaETH Testnet
+        env:
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          MEGAETH_TESTNET_URL: ${{ secrets.MEGAETH_TESTNET_URL }}
+        run: |
+          cd packages/hashpin-contracts
+          npx hardhat run scripts/deploy.ts --network megaeth-testnet
+          
+      - name: Save Contract Addresses
+        id: save-addresses
+        run: |
+          echo "CONTRACT_ADDRESS=$(cat packages/hashpin-contracts/deployments/sit/Hashpin.json | jq -r .address)" >> $GITHUB_ENV
+          echo "ADAPTER_ADDRESS=$(cat packages/hashpin-contracts/deployments/sit/ERC721HashpinAdapter.json | jq -r .address)" >> $GITHUB_ENV
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: deploy-contracts
+    runs-on: ubuntu-latest
+    environment: sit
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+        
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_CONTRACT_ADDRESS: ${{ env.CONTRACT_ADDRESS }}
+          NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS: ${{ env.ADAPTER_ADDRESS }}
+          NEXT_PUBLIC_ENVIRONMENT: 'sit'
+        run: |
+          cd apps/hashpin-ui
+          vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+
+  integration-tests:
+    name: Run Integration Tests
+    needs: deploy-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Run Integration Tests
+        run: npm run test:integration
+        env:
+          TEST_URL: 'https://sit.hashpin.org' 

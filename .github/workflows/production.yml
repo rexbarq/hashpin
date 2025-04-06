@@ -1,0 +1,121 @@
+name: Production Deployment
+
+on:
+  push:
+    branches:
+      - production
+
+env:
+  NODE_VERSION: 16
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Build Packages
+        run: npm run build
+        
+      - name: Run Tests
+        run: |
+          cd packages/hashpin-contracts
+          npm run test
+          cd ../../apps/hashpin-ui
+          npm run test
+
+  deploy-approval:
+    name: Production Deployment Approval
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production-approval
+    steps:
+      - name: Manual Approval Check
+        run: echo "Production deployment approved"
+
+  deploy-contracts:
+    name: Deploy Smart Contracts
+    needs: deploy-approval
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install Dependencies
+        run: |
+          cd packages/hashpin-contracts
+          npm ci
+          
+      - name: Deploy to MegaETH Mainnet
+        env:
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          MEGAETH_MAINNET_URL: ${{ secrets.MEGAETH_MAINNET_URL }}
+        run: |
+          cd packages/hashpin-contracts
+          npx hardhat run scripts/deploy.ts --network megaeth-mainnet
+          
+      - name: Save Contract Addresses
+        id: save-addresses
+        run: |
+          echo "CONTRACT_ADDRESS=$(cat packages/hashpin-contracts/deployments/production/Hashpin.json | jq -r .address)" >> $GITHUB_ENV
+          echo "ADAPTER_ADDRESS=$(cat packages/hashpin-contracts/deployments/production/ERC721HashpinAdapter.json | jq -r .address)" >> $GITHUB_ENV
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: deploy-contracts
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+        
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_CONTRACT_ADDRESS: ${{ env.CONTRACT_ADDRESS }}
+          NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS: ${{ env.ADAPTER_ADDRESS }}
+          NEXT_PUBLIC_ENVIRONMENT: 'production'
+        run: |
+          cd apps/hashpin-ui
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+  health-check:
+    name: Production Health Check
+    needs: deploy-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          
+      - name: Run Health Checks
+        run: npm run health-check
+        env:
+          HEALTH_CHECK_URL: 'https://hashpin.org' 
