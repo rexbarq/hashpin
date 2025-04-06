@@ -459,13 +459,21 @@ export function HashClaimForm() {
         
         setErrorMessage(null);
         console.log('Hash verification successful:', { pinnerAddress, pinTimestamp });
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Contract error details:', error);
         
+        // Perform a type check before accessing properties
+        let errorMessage: string | undefined;
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        } // Add more checks if other error types are expected
+
         // Check if the error is because the hash is not found
-        if (error.message?.includes('Hash not found') || 
-            error.message?.includes('revert') || 
-            error.message?.includes('execution reverted')) {
+        if (errorMessage?.includes('Hash not found') || 
+            errorMessage?.includes('revert') || 
+            errorMessage?.includes('execution reverted')) {
           
           // Normalize network IDs - treat 1337 and 31337 as the same (Hardhat/localhost)
           const isLocalNetwork = (id: number) => id === 1337 || id === 31337;

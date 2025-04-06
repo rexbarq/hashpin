@@ -1,7 +1,7 @@
 'use client'
 
 import { createWeb3Modal } from '@web3modal/wagmi/react'
-import { WagmiProvider, createConfig, type Config } from 'wagmi'
+import { WagmiProvider, createConfig } from 'wagmi'
 import { hardhat, sepolia, Chain } from 'wagmi/chains'
 import { http } from 'viem'
 import { walletConnect, injected } from 'wagmi/connectors'
