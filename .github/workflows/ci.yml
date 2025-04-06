@@ -9,7 +9,7 @@ on:
       - master # Run on PRs targeting master
 
 env:
-  NODE_VERSION: 16
+  NODE_VERSION: 20
 
 jobs:
   test:

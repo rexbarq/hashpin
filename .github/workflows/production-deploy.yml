@@ -6,7 +6,7 @@ on:
       - production
 
 env:
-  NODE_VERSION: 16
+  NODE_VERSION: 20
   # TODO: Set correct git user/email for commit
   GIT_USER_NAME: "GitHub Actions Bot"
   GIT_USER_EMAIL: "actions-bot@github.com"
