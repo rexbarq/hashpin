@@ -1,0 +1,103 @@
+name: Production Deployment
+
+on:
+  push:
+    branches:
+      - production
+
+env:
+  NODE_VERSION: 16
+  # TODO: Set correct git user/email for commit
+  GIT_USER_NAME: "GitHub Actions Bot"
+  GIT_USER_EMAIL: "actions-bot@github.com"
+
+jobs:
+  version_and_deploy:
+    name: Version & Deploy Contracts
+    runs-on: ubuntu-latest
+    # Use the GitHub environment for secrets and approval
+    environment:
+      name: production 
+      url: https://hashpin.org # TODO: Update with actual production URL if available
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          # We need full history for changeset version and permission to push back
+          fetch-depth: 0 
+          token: ${{ secrets.GITHUB_TOKEN }} # Use default GH token for checking out
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Configure Git User
+        run: |
+          git config --global user.name "${{ env.GIT_USER_NAME }}"
+          git config --global user.email "${{ env.GIT_USER_EMAIL }}"
+
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # This command runs `changeset version`
+          version: npm run changeset:version
+          # Optional: Define commit message for version commit
+          commit: "chore: update package versions and changelogs"
+          # Optional: Define title for automatic PR (if created)
+          title: "chore: update package versions and changelogs"
+          # Important: Use a token with write access to push the commit
+          # Using secrets.GITHUB_TOKEN might require workflow permission adjustments
+          # Consider using a Personal Access Token (PAT) if needed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # --- Approval Gate is implicitly handled by the 'environment: production' setting ---
+      # The workflow will pause here until a reviewer approves in the GitHub UI.
+      
+      - name: Log New Version
+        if: steps.changesets.outputs.published == 'true'
+        run: echo "Published release version ${{ steps.changesets.outputs.publishedVersion }}"
+
+      - name: Deploy Contracts to Mainnet
+        env:
+          # Secrets are automatically available from the 'production' environment
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          MEGAETH_MAINNET_URL: ${{ secrets.MEGAETH_MAINNET_URL }}
+        run: |
+          echo "Deploying contracts..."
+          # TODO [A]: Replace with actual mainnet deployment command
+          # Example: npx hardhat run scripts/deploy.ts --network mainnet 
+          echo "CONTRACT_ADDRESS=0xMainnetContractAddress" >> $GITHUB_ENV
+          echo "ADAPTER_ADDRESS=0xMainnetAdapterAddress" >> $GITHUB_ENV
+          
+      - name: Record New Contract Addresses
+        # TODO [A]: Implement proper address recording (e.g., save to file, artifact)
+        run: |
+          echo "Recording addresses..."
+          echo "Mainnet Contract: ${{ env.CONTRACT_ADDRESS }}"
+          echo "Mainnet Adapter: ${{ env.ADAPTER_ADDRESS }}"
+      
+      # TODO [B]: Add step for contract verification
+
+      - name: Update Vercel Environment Variables
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # TODO: Replace with your actual Vercel Project ID and Team ID if needed for CLI commands
+          # VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }} 
+        run: |
+          echo "Updating Vercel environment variables..."
+          # TODO [A]: Install Vercel CLI and implement commands to update variables
+          # Example using Vercel CLI (might need adjustments based on your setup):
+          # npm install --global vercel@latest
+          # vercel env rm NEXT_PUBLIC_CONTRACT_ADDRESS production --token $VERCEL_TOKEN --yes || true 
+          # vercel env add NEXT_PUBLIC_CONTRACT_ADDRESS ${{ env.CONTRACT_ADDRESS }} production --token $VERCEL_TOKEN
+          # vercel env rm NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS production --token $VERCEL_TOKEN --yes || true
+          # vercel env add NEXT_PUBLIC_ERC721_ADAPTER_ADDRESS ${{ env.ADAPTER_ADDRESS }} production --token $VERCEL_TOKEN
+          echo "Vercel update commands executed (implement actual logic)." 
