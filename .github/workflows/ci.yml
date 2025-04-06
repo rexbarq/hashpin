@@ -1,0 +1,44 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - '**' # Run on pushes to all branches
+  pull_request:
+    branches:
+      - master # Run on PRs targeting master
+
+env:
+  NODE_VERSION: 16
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for changeset validation later
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build All Packages
+        run: npm run build --workspaces --if-present # Build all workspaces if build script exists
+
+      - name: Run Contract Tests
+        run: npm test -w hashpin-contracts
+
+      - name: Run UI Tests
+        run: npm test -w hashpin-ui
+
+      # TODO [B]: Add step to validate changesets (npx changeset status)
+      # TODO [A]: Add steps to build/test new library/CLI when created
+      # TODO [B]: Add step to run integration tests 
