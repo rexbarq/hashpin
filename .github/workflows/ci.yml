@@ -34,7 +34,7 @@ jobs:
         run: npm run build --workspaces --if-present # Build all workspaces if build script exists
 
       - name: Run Contract Tests
-        run: npm test -w hashpin-contracts
+        run: npm test -w @hashpin-monorepo/hashpin-contracts
 
       - name: Run UI Tests
         run: npm test -w hashpin-ui
