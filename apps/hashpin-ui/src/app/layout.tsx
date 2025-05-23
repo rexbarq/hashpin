@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "./client-providers";
@@ -23,12 +23,15 @@ export const metadata: Metadata = {
       { url: '/web-app-manifest-512x512.png', sizes: '512x512', type: 'image/png' }
     ]
   },
-  themeColor: '#000000',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'HashPin'
   }
+};
+
+export const viewport: Viewport = {
+  themeColor: '#000000'
 };
 
 export default function RootLayout({
