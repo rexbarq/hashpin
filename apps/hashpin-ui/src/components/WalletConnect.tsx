@@ -27,17 +27,6 @@ export function WalletConnect() {
       setIsDisconnecting(true)
       console.log('🔌 Disconnecting wallet...')
       await disconnect()
-      
-      // Clear any stored connection state
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('wagmi.connected')
-        localStorage.removeItem('wagmi.wallet')
-        localStorage.removeItem('wc@2:core:0.3//keychain')
-        localStorage.removeItem('wc@2:client:0.3//session')
-      }
-      
-      // Force reload to clear any cached state
-      window.location.reload()
     } catch (error) {
       console.error('Error disconnecting:', error)
       setHasError(true)

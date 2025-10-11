@@ -6,7 +6,6 @@ import { hardhat, sepolia, Chain } from 'wagmi/chains'
 import { http } from 'viem'
 import { walletConnect, injected } from 'wagmi/connectors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect } from 'react'
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -103,17 +102,6 @@ console.log('🔌 Web3Modal Configuration:', {
 
 // Export providers with the correct chain order
 export function Providers({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    // Clear any stale connection requests on mount
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('wagmi.connected')
-      localStorage.removeItem('wagmi.wallet')
-      localStorage.removeItem('wc@2:core:0.3//keychain')
-      localStorage.removeItem('wc@2:client:0.3//session')
-      console.log('📱 Providers mounted, cleared stale connections')
-    }
-  }, [])
-
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>

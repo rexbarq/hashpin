@@ -59,3 +59,5 @@ testem.log
 .nx/cache
 .nx/workspace-data
 Hashpin Protocol - A system for proving the existence of anything.md
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
