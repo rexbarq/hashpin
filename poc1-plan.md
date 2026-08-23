@@ -12,9 +12,9 @@ The evidence product end-to-end, as an explicitly interim, founder-operated, upg
 
 The proof bundle **is** the product of PoC-1. Everything else exists to produce it cheaply and instantly.
 
-**In scope:** `pin` / `pinBatch` (blind keys, ch. 2), `verify`, accumulator (ch. 11), chronicle seal (ch. 1/11), L1 anchor contract + relayer, indexer + proof-bundle API, offline verifier, reworked web UI, chronicle archival, monitoring, interim labeling.
+**In scope:** `pin` / `pinBatch` (blind keys, ch. 2), `verify`, accumulator (ch. 11), chronicle seal (ch. 1/11), L1 anchor contract + relayer, indexer + proof-bundle API, offline verifier, reworked web UI with **two submission lanes** — direct wallet, and a first-party **pinning relay** for non-crypto-native users (founder decision 19 Aug 2026; mechanics designed in A8) — chronicle archival, monitoring, interim labeling.
 
-**Out of scope (PoC-2 or later):** claims, the 30-day window, usurpation, ERC-721s, fees of any kind (no fee code ships at all); difficulty > 0, sealer rewards, retarget activation; the CLI/SDK and Figma instruments as *products* (PoC-1 builds their library plumbing only); aggregator service; the live MVP.
+**Out of scope (PoC-2 or later):** claims, the 30-day window, usurpation, ERC-721s, fees of any kind (no fee code ships at all); difficulty > 0, sealer rewards, retarget activation; the CLI/SDK and Figma instruments as *products* (PoC-1 builds their library plumbing only); the third-party aggregator *ecosystem* — independent operators and their economics (the first-party relay lane above **is** in scope); the live MVP.
 
 **Standing invariants this plan must not violate:** pins are blind (nothing but a 32-byte key on the wire); pinners never grind; receipts are instant; proofs are generated while history is live and custodied by users; the deployment says exactly what it is (VISION §2; Phase 0 is exempt only from immutability).
 
@@ -60,7 +60,7 @@ No stage starts before the previous gate is signed off (founder sign-off, dated,
 - [x] Deployment plan recorded (critique ch. 11 deployment-plan note; VISION Phase 0).
 - [ ] MegaETH **testnet** RPC access + faucet funds; chain metadata (chain id, gas token, explorer) collected.
 - [ ] Sepolia funds for anchor testing.
-- [ ] Key roles created (see §8.3): deployer, proxy admin, sealer, anchor relayer — four distinct keys, admin key cold.
+- [ ] Key roles created (see §8.3): deployer, proxy admin, sealer, anchor relayer, relay submitter — five distinct keys, admin key cold.
 - [ ] Repo baseline green: `npm test` / `nx run-many --target=test` passes as-is (the old `Hashpin.sol` suite still passes on its own terms; it will be retired in Stage B).
 - [ ] This plan reviewed and G0 signed in the ledger.
 
@@ -116,8 +116,22 @@ Versioned JSON schema containing: content hash + user-tree Merkle proof → root
 - EigenDA retention terms as deployed by MegaETH (confirms the permanence analysis the anchor design already hedges).
 - MegaETH mainnet gas pricing for our write pattern (informs G2 budgets).
 
+### A8. Pinning relay + walletless identity (the two-lane write path)
+
+**Decided (founder, 19 Aug 2026):** the PoC offers two submission lanes — a direct wallet transaction, and a first-party relay for users who are not crypto-native. The GUI computes hash → tree → blind key client-side in **both** lanes; only who submits the 32 bytes differs. A8 designs the mechanics; G1 rules on them.
+
+Why this is safe by construction (ch. 2): the beneficiary is committed inside the pin key, so the relay cannot steal a pin — only delay it, visibly, with the direct lane as the standing escape — and a keys-only API means it learns nothing. The relay is also the substrate PoC-2's instruments (Figma plugin, CLI) require: neither can demand a funded wallet.
+
+Must specify:
+- **API surface:** accepts finished 32-byte keys only — never hashes, content, or metadata (learns-nothing enforced at the boundary); single and batch endpoints; batching cadence into `pinBatch`; per-key dedupe (pre-check re-pins instead of burning reverts).
+- **Abuse bounds:** rate limits; daily gas budget cap with an alert at 80% (§8.4); a written drain-radius statement — worst case is the day's gas budget, nothing else.
+- **Relay submitter key:** the fifth key role (§8.3) — hot, treasury-funded MegaETH gas only, zero authority; rotation procedure.
+- **Walletless pinner identity:** the pinner needs an *address*, not a wallet — pinning never requires the pinner's signature. Both sources offered: (a) paste an address you control (checksum-validated, with a blunt "only this address's holder can ever claim" warning); (b) a locally generated keypair with a **forced backup/export step** before the first pin. Loss semantics stated in the UI: evidence survives key loss forever (verification needs no signature); only the future ownership claim is lost.
+- **Receipt honesty:** the relay lane carries an extra status state — *submitted → on-chain → sealed → anchored* — because a relay receipt is not a chain receipt.
+- **Figma-plugin forward-compatibility (design only; the build is PoC-2):** `figma.clientStorage` identity is per-machine and cache-fragile — the backup step is mandatory there, and pasting an existing address is the recommended path for plugin users.
+
 **Gate G1 — spec frozen. Criteria:**
-- [ ] `poc1-spec.md` answers A1–A6 with concrete formats and signatures; no TBDs in the write path.
+- [ ] `poc1-spec.md` answers A1–A6 and A8 with concrete formats and signatures; no TBDs in the write path.
 - [ ] A7 findings written with citations; critique ch. 11 follow-ups updated.
 - [ ] Gas budget table set (used by G2): target ≤ 150k gas/single pin, ≤ 80k marginal gas/key in batch — revise with A7 data, then freeze.
 - [ ] Founder sign-off in ledger.
@@ -161,12 +175,14 @@ Versioned JSON schema containing: content hash + user-tree Merkle proof → root
 1. **Sealer cron** (in `apps/hashpin-backend`): calls `seal` on cadence; idempotent (skips if nothing new); alerts on failure.
 2. **Anchor relayer** (same service): posts tip to the anchor contract on cadence; tracks L1 confirmation; alerts on lag.
 3. **Indexer + proof API:** ingests `Pinned`/`Sealed` events, maintains the accumulator mirror (via `hashpin-merkle`), serves proof bundles per `hashpin-proof-v1`; exposes registry stats (pin count, seal height, last anchor). Must support **cold rebuild from chain logs alone** — the indexer is a cache, never a source of truth.
-4. **Offline verifier:** small standalone package (`packages/hashpin-verify` or a `hashpin-merkle` subpath) + tiny CLI: `verify-bundle <bundle.json>` → checks the full chain of custody (A6) given the bundle plus an L1 RPC *or* a pasted anchor event. This is the artifact a skeptic runs in 2076; keep its dependency tree near zero.
-5. **UI rework (`apps/hashpin-ui`):** keep the app shell (§0.1 — providers, `WalletConnect`, layout, the recently fixed wagmi/web3modal wiring); **replace `HashPinForm.tsx` and `HashVerify.tsx` outright** rather than untangling them — the mining loop (`mineValidNonce`), nonce-in-proof handling, and pin-time metadata all disappear. New flow: hash files locally in the browser (content never leaves the machine); build user trees client-side (`hashpin-merkle`); compute the blind key; `pin`; then poll and hand the user their **downloadable proof bundle** with plain-language status: *received → sealed → anchored*. Interim banner on every page (§8.2 language). A "verify a bundle" page that runs the offline verifier in-browser.
-6. **Chronicle archival job:** appends sealed headers as JSONL to a public mirror (git repo and/or IPFS) on cadence (§8.5).
+4. **Pinning relay** (in `apps/hashpin-backend`, per A8): keys-only endpoints, batcher into `pinBatch`, per-key dedupe, rate limits, daily gas budget cap + alerts, submitter-key handling. The direct lane never depends on it: relay down means walletless pinning pauses, wallet pinning is unaffected.
+5. **Offline verifier:** small standalone package (`packages/hashpin-verify` or a `hashpin-merkle` subpath) + tiny CLI: `verify-bundle <bundle.json>` → checks the full chain of custody (A6) given the bundle plus an L1 RPC *or* a pasted anchor event. This is the artifact a skeptic runs in 2076; keep its dependency tree near zero.
+6. **UI rework (`apps/hashpin-ui`):** keep the app shell (§0.1 — providers, `WalletConnect`, layout, the recently fixed wagmi/web3modal wiring); **replace `HashPinForm.tsx` and `HashVerify.tsx` outright** rather than untangling them — the mining loop (`mineValidNonce`), nonce-in-proof handling, and pin-time metadata all disappear. New flow: hash files locally in the browser (content never leaves the machine); build user trees client-side (`hashpin-merkle`); compute the blind key; submit via **either lane** — connected wallet, or the relay with a walletless identity (A8: pasted address or generated keypair with the forced backup step); then poll and hand the user their **downloadable proof bundle** with plain-language status: *on-chain → sealed → anchored*, plus the relay lane's extra *submitted* state (A8). Interim banner on every page (§8.2 language). A "verify a bundle" page that runs the offline verifier in-browser.
+7. **Chronicle archival job:** appends sealed headers as JSONL to a public mirror (git repo and/or IPFS) on cadence (§8.5).
 
 **Gate G3 — end-to-end local. Criteria:**
 - [ ] Demo script: pin a file → receipt < 2s → sealed on cadence → anchored on local L1 → bundle downloads → `verify-bundle` passes.
+- [ ] Walletless lane end-to-end: pin via the relay with a freshly generated local identity (backup step enforced) → the bundle verifies identically to the wallet lane's.
 - [ ] **Kill-the-stack drill:** stop devnet, indexer, and every service; the previously downloaded bundle still verifies against the local L1 sim's anchor record alone.
 - [ ] Indexer cold-rebuild drill: wipe its DB, rebuild from logs, all previously issued bundles still provable.
 - [ ] UI shows the interim banner and the three-state status truthfully (a pin that is received-but-unsealed says so).
@@ -187,6 +203,7 @@ Versioned JSON schema containing: content hash + user-tree Merkle proof → root
    - Missed seals (cron down 24h) → chronicle continues correctly on restart; no gap ambiguity.
    - **Upgrade drill:** one real proxy upgrade on testnet; state intact; disclosure note drafted as if public.
    - Pause/unpause drill; verify reads keep working while paused.
+   - Relay abuse drill: hammer the relay to its rate and budget caps → pins throttle gracefully, the 80% budget alert fires, and the direct wallet lane is unaffected.
    - Force-inclusion attempt (if A7 found the path exists): force one pin via the L1 portal; record cost and latency.
    - Kill-the-host drill against testnet: verify bundles with MegaETH RPC unreachable, Sepolia only.
 4. **Volume/means test of proof generation at scale:** bundles remain generatable at the largest tested accumulator size; measure indexer rebuild time.
@@ -242,11 +259,11 @@ Versioned JSON schema containing: content hash + user-tree Merkle proof → root
 
 ### 8.3 Key management
 
-Four distinct keys, no reuse: **deployer** (used once per network), **proxy admin** (cold — hardware or Safe multisig if available on MegaETH; never on a server), **sealer** (hot, harmless by design — sealing is permissionless anyway), **anchor relayer** (hot, holds bounded L1 funds only). Documented in the runbook; rotation procedure written before G5.
+Five distinct keys, no reuse: **deployer** (used once per network), **proxy admin** (cold — hardware or Safe multisig if available on MegaETH; never on a server), **sealer** (hot, harmless by design — sealing is permissionless anyway), **anchor relayer** (hot, holds bounded L1 funds only), **relay submitter** (hot, treasury-funded MegaETH gas only, zero authority — compromise means a drained gas budget, nothing more; per A8). Documented in the runbook; rotation procedure written before G5.
 
 ### 8.4 Monitoring
 
-Metrics: pin count, receipt latency, seal height + lag, anchor lag, indexer head lag, relayer balance, service uptime. Alerts to the founder on: missed seal cycle ×2, missed anchor cycle, indexer lag > threshold, low relayer balance, any pause event.
+Metrics: pin count (per lane), receipt latency, seal height + lag, anchor lag, indexer head lag, anchor-relayer and relay-submitter balances, daily relay gas spend, service uptime. Alerts to the founder on: missed seal cycle ×2, missed anchor cycle, indexer lag > threshold, low balance on either hot key, relay budget at 80%, any pause event.
 
 ### 8.5 Archival
 
